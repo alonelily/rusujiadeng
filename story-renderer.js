@@ -7,15 +7,6 @@
   const STORY_FONT_FAMILY = '"FgoFzZhengzhong", "Microsoft YaHei", sans-serif';
   const STORY_FONT_OPTIONS = {
     system: { label: "系统默认", family: STORY_FALLBACK_FONT_FAMILY, url: null },
-    "fgo-story": { label: "FGO Story", family: "FGOStory", url: "assets/fonts/fgo-story.otf" },
-    "font-2": { label: "字体 2 · OTF", family: "FgoFont2", url: "assets/fonts/2.otf" },
-    "font-3": { label: "字体 3 · OTF", family: "FgoFont3", url: "assets/fonts/3.otf" },
-    "font-4": { label: "字体 4 · OTF", family: "FgoFont4", url: "assets/fonts/4.otf" },
-    "font-5": { label: "字体 5 · OTF", family: "FgoFont5", url: "assets/fonts/5.otf" },
-    "font-fzlthjw": { label: "FZLTHJW · TTF", family: "FgoFzlthjw", url: "assets/fonts/FZLTHJW.TTF" },
-    "font-reeji": { label: "瑞锦云峰宋 · TTF", family: "FgoReeji", url: "assets/fonts/Reeji-CloudSongDa-GB%20Regular.ttf" },
-    "font-simsun": { label: "宋体 · TTC", family: "FgoSimSun", url: "assets/fonts/simsun.ttc" },
-    "font-fzxiaobiao": { label: "方正小标宋 · TTF", family: "FgoFzXiaobiao", url: "assets/fonts/%E6%96%B9%E6%AD%A3%E5%B0%8F%E6%A0%87%E5%AE%8B_GBK.ttf" },
     "font-fzzhengzhong": { label: "方正正中黑 · TTF", family: "FgoFzZhengzhong", url: "assets/fonts/fz-zhengzhong.ttf" }
   };
   const STORY_BASE_WIDTH = 1024;
