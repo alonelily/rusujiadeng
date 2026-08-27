@@ -340,51 +340,54 @@
       }
       const layout = getDialogueLayout(width, height, aspect);
       const dialogueBox = loadImage(STORY_DIALOGUE_BOX_URL);
-      const nameBox = loadImage(STORY_NAME_BOX_URL);
+      const speaker = String(scene.dialogue.speaker || "").trim();
+      const nameBox = speaker ? loadImage(STORY_NAME_BOX_URL) : null;
       if (dialogueBox && dialogueBox.ready) {
         context.drawImage(dialogueBox.image, layout.boxX, layout.boxY, layout.boxWidth, layout.boxHeight);
       } else {
         drawDialogueFallback(context, layout);
       }
-      if (nameBox && nameBox.ready) {
-        context.drawImage(nameBox.image, layout.nameX, layout.nameY, layout.nameWidth, layout.nameHeight);
-      } else {
-        drawNameFallback(context, layout);
-      }
 
-      context.globalAlpha = alpha * STORY_NAME_TEXT_OPACITY;
       context.textBaseline = "alphabetic";
-      context.fillStyle = "#fafaf8";
       context.strokeStyle = "rgb(7 27 58 / 86%)";
       context.lineJoin = "round";
       context.lineWidth = Math.max(1, 1.35 * layout.scale);
-      context.shadowColor = "rgb(0 0 0 / 72%)";
-      context.shadowBlur = Math.max(0.8, 1.35 * layout.scale);
-      context.shadowOffsetX = Math.max(0.6, 1.25 * layout.scale);
-      context.shadowOffsetY = Math.max(0.8, 1.65 * layout.scale);
+      if (speaker) {
+        if (nameBox && nameBox.ready) {
+          context.drawImage(nameBox.image, layout.nameX, layout.nameY, layout.nameWidth, layout.nameHeight);
+        } else {
+          drawNameFallback(context, layout);
+        }
+        context.globalAlpha = alpha * STORY_NAME_TEXT_OPACITY;
+        context.fillStyle = "#fafaf8";
+        context.shadowColor = "rgb(0 0 0 / 72%)";
+        context.shadowBlur = Math.max(0.8, 1.35 * layout.scale);
+        context.shadowOffsetX = Math.max(0.6, 1.25 * layout.scale);
+        context.shadowOffsetY = Math.max(0.8, 1.65 * layout.scale);
 
-      const speaker = scene.dialogue.speaker || "旁白";
-      const speakerWidth = layout.nameWidth - 54 * layout.scale;
-      const fittedNameSize = fitFontSize(
-        context,
-        speaker,
-        layout.nameFontSize,
-        Math.max(12, 18 * layout.scale),
-        speakerWidth,
-        600,
-        activeFontFamily
-      );
-      context.font = `600 ${Math.round(fittedNameSize)}px ${activeFontFamily}`;
-      setDialogueGradient(
-        context,
-        layout.speakerX,
-        layout.speakerY - fittedNameSize,
-        layout.speakerY + Math.max(3, fittedNameSize * 0.12)
-      );
-      drawOutlinedText(context, speaker, layout.speakerX, layout.speakerY);
+        const speakerWidth = layout.nameWidth - 54 * layout.scale;
+        const fittedNameSize = fitFontSize(
+          context,
+          speaker,
+          layout.nameFontSize,
+          Math.max(12, 18 * layout.scale),
+          speakerWidth,
+          600,
+          activeFontFamily
+        );
+        context.font = `600 ${Math.round(fittedNameSize)}px ${activeFontFamily}`;
+        setDialogueGradient(
+          context,
+          layout.speakerX,
+          layout.speakerY - fittedNameSize,
+          layout.speakerY + Math.max(3, fittedNameSize * 0.12)
+        );
+        drawOutlinedText(context, speaker, layout.speakerX, layout.speakerY);
+      }
 
       const visibleText = getVisibleDialogueText(scene.dialogue, normalizedProgress);
       context.globalAlpha = alpha * STORY_DIALOGUE_TEXT_OPACITY;
+      context.fillStyle = "#fafaf8";
       context.shadowColor = "rgb(0 0 0 / 34%)";
       context.shadowBlur = Math.max(0.5, 0.8 * layout.scale);
       context.shadowOffsetX = Math.max(0.25, 0.45 * layout.scale);

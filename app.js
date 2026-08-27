@@ -3616,7 +3616,9 @@
     dom.storyActiveSceneLabel.textContent = `分镜 ${index + 1} / ${state.story.project.scenes.length}`;
     dom.storySpeakerInput.value = dialogue.speaker || "";
     dom.storySpeakerInput.readOnly = Boolean(dialogue.actorId);
-    dom.storySpeakerInput.title = dialogue.actorId ? "人物名称请在人物通用选项中修改" : "输入旁白显示名称";
+    dom.storySpeakerInput.title = dialogue.actorId
+      ? "人物名称请在人物通用选项中修改"
+      : "旁白名称可选，留空时不显示姓名栏";
     dom.storyDialogueInput.value = dialogue.text || "";
     dom.storyDurationInput.value = String(dialogue.duration);
     dom.storyDeleteSceneButton.disabled = state.story.project.scenes.length <= 1;
@@ -3865,11 +3867,17 @@
     dom.storyActorOptionsList.replaceChildren();
     dom.storyActorOptionsSelect.replaceChildren();
     if (!scene.actors.length) {
-      dom.storySpeakerActorSelect.disabled = true;
-      const emptyOption = document.createElement("option");
-      emptyOption.textContent = "请先选择剧情人物";
-      dom.storySpeakerActorSelect.append(emptyOption);
-      dom.storyActorSummary.textContent = "尚未选择人物";
+      // A scene without visual characters is an intentional narration scene.
+      // Clear stale actor references from older project backups so the speaker
+      // field remains editable as an optional narrator name.
+      dialogue.actorId = null;
+      dom.storySpeakerActorSelect.disabled = false;
+      const narratorOption = document.createElement("option");
+      narratorOption.value = "";
+      narratorOption.textContent = "旁白（无发言人物）";
+      dom.storySpeakerActorSelect.append(narratorOption);
+      dom.storySpeakerActorSelect.value = "";
+      dom.storyActorSummary.textContent = "本段：旁白";
       dom.storyActorOptionsSummary.textContent = "请选择要调整的人物";
       updateStoryActorTransformControls(scene, null, -1);
       updateStoryActorUniformControls(scene);
@@ -3920,10 +3928,12 @@
     const dialogue = getActiveStoryDialogue(scene);
     const actor = scene.actors.find((item) => item.assetId === dom.storySpeakerActorSelect.value) || null;
     dialogue.actorId = actor ? actor.assetId : null;
-    dialogue.speaker = actor ? getStoryActorDisplayName(actor, scene.actors.indexOf(actor)) : "旁白";
+    dialogue.speaker = actor ? getStoryActorDisplayName(actor, scene.actors.indexOf(actor)) : "";
     dom.storySpeakerInput.value = dialogue.speaker;
     dom.storySpeakerInput.readOnly = Boolean(actor);
-    dom.storySpeakerInput.title = actor ? "人物名称请在人物通用选项中修改" : "输入旁白显示名称";
+    dom.storySpeakerInput.title = actor
+      ? "人物名称请在人物通用选项中修改"
+      : "旁白名称可选，留空时不显示姓名栏";
     saveStoryProject();
     renderStoryActorList(scene);
     renderStoryDialogueList(scene);
@@ -5837,7 +5847,7 @@
   function findIncompleteStoryScene(options = {}) {
     const requireAssetUrls = Boolean(options.requireAssetUrls);
     return state.story.project.scenes.findIndex((scene) => {
-      return !scene.background || (requireAssetUrls && !scene.background.url) || !scene.actors.length ||
+      return !scene.background || (requireAssetUrls && !scene.background.url) ||
         (requireAssetUrls && scene.actors.some((actor) => !actor.url)) ||
         getStoryDialogues(scene).some((dialogue) => !String(dialogue.text || "").trim() ||
           (requireAssetUrls && Object.values(dialogue.actorVariants || {}).some((variant) => !variant.url)));
@@ -5849,7 +5859,7 @@
     const scene = state.story.project.scenes[incompleteIndex];
     const missing = [
       !scene.background || (requireAssetUrls && !scene.background.url) ? "剧情背景" : null,
-      !scene.actors.length || (requireAssetUrls && scene.actors.some((actor) => !actor.url)) ? "剧情人物和表情" : null,
+      (requireAssetUrls && scene.actors.some((actor) => !actor.url)) ? "剧情人物和表情" : null,
       getStoryDialogues(scene).some((dialogue) => !String(dialogue.text || "").trim()) ? "完整对话内容" : null
     ].filter(Boolean);
     state.story.activeSceneId = scene.id;
