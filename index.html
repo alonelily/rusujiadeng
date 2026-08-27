@@ -1,0 +1,787 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light" />
+    <meta name="theme-color" content="#ffffff" />
+    <link rel="manifest" href="site.webmanifest" />
+    <link rel="apple-touch-icon" href="assets/app-icon-source.jpg" />
+    <meta
+      name="description"
+      content="Atlas Academy FGO 礼装与从者立绘资源浏览器"
+    />
+    <title>如数迦贞</title>
+    <link rel="stylesheet" href="styles.css?v=20260826-update-notice-1" />
+  </head>
+  <body class="is-intro-open">
+    <section class="source-intro" id="sourceIntro" role="dialog" aria-modal="true" aria-labelledby="sourceIntroTitle">
+      <div class="intro-masthead">
+        <span>CHALDEA</span>
+        <span>FGO VISUAL ARCHIVE</span>
+      </div>
+
+      <div class="intro-content">
+        <span class="intro-index">A / 001</span>
+        <h1 id="sourceIntroTitle">如数迦贞</h1>
+        <p class="intro-notice" id="sourceIntroNotice">所有数据来源于<strong>阿特拉斯院数据库</strong></p>
+        <span class="intro-source">POWERED BY ATLAS ACADEMY</span>
+
+        <aside class="intro-development-notice" aria-labelledby="developmentNoticeTitle">
+          <strong id="developmentNoticeTitle">开发公告</strong>
+          <p>
+            本应用持续开发中，使用问题请发送邮件至
+            <a href="mailto:1725152015@qq.com">1725152015@qq.com</a>，或者添加 QQ 群
+            <span class="intro-contact-value">1040617471</span> 反馈。
+          </p>
+        </aside>
+
+        <aside class="intro-update-notice" aria-labelledby="updateNoticeTitle">
+          <header class="intro-update-heading">
+            <span>VERSION UPDATE</span>
+            <strong id="updateNoticeTitle">更新公告</strong>
+            <time datetime="2026-08-26">2026.08.26</time>
+          </header>
+          <ul class="intro-update-list">
+            <li>
+              <strong>本地作品与备份</strong>
+              <span>剧情作品会自动保存在本机，并支持导出、恢复 .rusu 备份。</span>
+            </li>
+            <li>
+              <strong>外部素材导入</strong>
+              <span>支持导入外部剧情背景，也可将多张人物立绘作为差分集直接使用。</span>
+            </li>
+          </ul>
+        </aside>
+
+        <div class="intro-window-grid" aria-label="功能入口">
+          <button class="intro-window intro-window-library" id="enterAppButton" type="button">
+            <span class="intro-window-image" aria-hidden="true"></span>
+            <span class="intro-window-caption">
+              <strong>图片浏览素材库</strong>
+              <small>IMAGE LIBRARY</small>
+              <span class="intro-window-arrow" aria-hidden="true">&#x2192;</span>
+            </span>
+          </button>
+          <button class="intro-window intro-window-story" id="enterStoryAppButton" type="button">
+            <span class="intro-window-image" aria-hidden="true"></span>
+            <span class="intro-window-caption">
+              <strong>简易剧情生成</strong>
+              <small>STORY BUILDER</small>
+              <span class="intro-window-arrow" aria-hidden="true">&#x2192;</span>
+            </span>
+          </button>
+          <button class="intro-window intro-window-more" id="introMoreButton" type="button">
+            <span class="intro-window-image" aria-hidden="true"></span>
+            <span class="intro-window-caption">
+              <strong>更多功能待开发</strong>
+              <small>COMING SOON</small>
+              <span class="intro-window-arrow" aria-hidden="true">&#x2192;</span>
+            </span>
+          </button>
+        </div>
+      </div>
+
+      <div class="intro-folio" aria-hidden="true">
+        <span>VISUAL INDEX</span>
+        <span>2026</span>
+      </div>
+    </section>
+
+    <div class="app-shell">
+      <header class="topbar">
+        <a class="brand" href="./" aria-label="如数迦贞首页">
+          <span class="brand-mark" aria-hidden="true">A</span>
+          <span class="brand-copy">
+            <strong>如数迦贞</strong>
+            <small>ATLAS ASSET INDEX</small>
+          </span>
+        </a>
+
+        <div class="topbar-actions">
+          <button class="home-button" id="homeButton" type="button" title="返回主界面">
+            <span aria-hidden="true">&#x2302;</span>
+            <span>主界面</span>
+          </button>
+          <div class="region-switcher" role="group" aria-label="选择服务器">
+            <button class="region-button is-active" type="button" data-region="JP">JP</button>
+            <button class="region-button" type="button" data-region="NA">NA</button>
+            <button class="region-button" type="button" data-region="CN">CN</button>
+            <button class="region-button" type="button" data-region="KR">KR</button>
+            <button class="region-button" type="button" data-region="TW">TW</button>
+          </div>
+          <label class="mobile-region-control" for="mobileRegionSelect">
+            <span class="sr-only">选择服务器</span>
+            <select id="mobileRegionSelect" aria-label="选择服务器">
+              <option value="JP">JP</option>
+              <option value="NA">NA</option>
+              <option value="CN">CN</option>
+              <option value="KR">KR</option>
+              <option value="TW">TW</option>
+            </select>
+          </label>
+          <button class="command-button" id="refreshButton" type="button" title="刷新数据">
+            <span class="command-icon" aria-hidden="true">&#x21bb;</span>
+            <span class="command-label">刷新</span>
+          </button>
+        </div>
+      </header>
+
+      <main>
+        <section class="library-band" aria-label="资源分类">
+          <div class="library-tabs" role="tablist" aria-label="资源分类">
+            <button
+              class="library-tab is-active"
+              id="equipTab"
+              type="button"
+              role="tab"
+              aria-selected="true"
+              data-library="equip"
+            >
+              <span>礼装图库</span>
+              <span class="tab-count" id="equipCount">--</span>
+            </button>
+            <button
+              class="library-tab"
+              id="servantTab"
+              type="button"
+              role="tab"
+              aria-selected="false"
+              data-library="servant"
+            >
+              <span>从者立绘</span>
+              <span class="tab-count" id="servantCount">--</span>
+            </button>
+            <button
+              class="library-tab"
+              id="backgroundTab"
+              type="button"
+              role="tab"
+              aria-selected="false"
+              data-library="backgrounds"
+            >
+              <span>剧情背景</span>
+              <span class="tab-count" id="backgroundCount">--</span>
+            </button>
+            <button
+              class="library-tab"
+              id="storyFigureTab"
+              type="button"
+              role="tab"
+              aria-selected="false"
+              data-library="storyFigures"
+            >
+              <span>剧情立绘</span>
+              <span class="tab-count" id="storyFigureCount">--</span>
+            </button>
+            <button
+              class="library-tab"
+              id="bgmTab"
+              type="button"
+              role="tab"
+              aria-selected="false"
+              data-library="bgm"
+            >
+              <span>BGM 音频</span>
+              <span class="tab-count" id="bgmCount">--</span>
+            </button>
+          </div>
+
+          <div class="source-status" id="sourceStatus" aria-live="polite">
+            <span class="status-dot is-loading" id="statusDot" aria-hidden="true"></span>
+            <span id="sourceStatusText">正在连接 Atlas Academy</span>
+          </div>
+        </section>
+
+        <section class="filter-band" aria-label="筛选资源">
+          <label class="search-control" for="searchInput">
+            <span class="search-symbol" aria-hidden="true"></span>
+            <input
+              id="searchInput"
+              type="search"
+              autocomplete="off"
+              placeholder="搜索名称、编号或 ID"
+            />
+            <button id="clearSearchButton" type="button" aria-label="清空搜索" title="清空搜索" hidden>
+              &times;
+            </button>
+          </label>
+
+          <button class="mobile-filter-button" id="mobileFilterButton" type="button" aria-expanded="false">
+            <span class="filter-glyph" aria-hidden="true">&#x2637;</span>
+            <span>筛选</span>
+            <span class="filter-count" id="filterCount">0</span>
+          </button>
+
+          <div class="advanced-filters" id="advancedFilters">
+            <label class="select-control">
+              <span>稀有度</span>
+              <select id="raritySelect" aria-label="按稀有度筛选">
+                <option value="all">全部星级</option>
+              </select>
+            </label>
+
+            <label class="select-control">
+              <span id="subtypeLabel">礼装类型</span>
+              <select id="subtypeSelect" aria-label="按类型筛选">
+                <option value="all">全部类型</option>
+              </select>
+            </label>
+
+            <label class="select-control">
+              <span>排序</span>
+              <select id="sortSelect" aria-label="资源排序">
+                <option value="newest">最新编号</option>
+                <option value="oldest">最早编号</option>
+                <option value="rarity">稀有度</option>
+                <option value="name">名称</option>
+              </select>
+            </label>
+
+            <label class="new-toggle" id="newToggleLabel">
+              <input id="newOnlyInput" type="checkbox" />
+              <span class="toggle-track" aria-hidden="true"><span></span></span>
+              <span>只看新增</span>
+              <span class="new-count" id="newCount">0</span>
+            </label>
+
+            <div class="density-switcher" role="group" aria-label="图片密度">
+              <button class="density-button is-active" type="button" data-density="comfortable">舒展</button>
+              <button class="density-button" type="button" data-density="compact">紧凑</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="results-band" aria-live="polite">
+          <div>
+            <strong id="resultCount">--</strong>
+            <span id="resultLabel">项资源</span>
+          </div>
+          <div class="version-meta">
+            <span id="versionTime">更新时间 --</span>
+            <span id="versionHash">版本 --</span>
+          </div>
+        </section>
+
+        <section class="gallery-section" aria-label="资源列表">
+          <div class="gallery-grid" id="galleryGrid"></div>
+
+          <div class="state-panel" id="statePanel" hidden>
+            <div class="state-mark" id="stateMark" aria-hidden="true">!</div>
+            <strong id="stateTitle"></strong>
+            <p id="stateMessage"></p>
+            <button class="primary-button" id="stateAction" type="button" hidden>重试</button>
+          </div>
+
+          <div class="load-sentinel" id="loadSentinel" aria-hidden="true">
+            <span></span><span></span><span></span>
+          </div>
+        </section>
+
+        <section class="story-generator-panel" id="storyGeneratorPanel" aria-labelledby="storyGeneratorTitle" hidden>
+          <header class="story-generator-header">
+            <div>
+              <span class="section-kicker">PERSONAL STORY BUILDER</span>
+              <h1 id="storyGeneratorTitle">剧情生成器</h1>
+              <p>用分镜卡片组合背景、人物、台词和转场。</p>
+            </div>
+            <div class="story-generator-actions">
+              <button class="secondary-button" id="storyGeneratorBackButton" type="button">返回主界面</button>
+              <button class="secondary-button" id="storyProjectLibraryButton" type="button">我的剧情</button>
+              <button class="secondary-button" id="storyNewProjectButton" type="button">新建作品</button>
+              <button class="secondary-button" id="storyBackupButton" type="button">备份</button>
+              <button class="secondary-button" id="storyImportButton" type="button">恢复备份</button>
+              <input id="storyImportInput" type="file" accept=".rusu,.json,application/json,application/vnd.rusu-project+json" hidden />
+              <button class="secondary-button" id="storyExportButton" type="button" hidden>导出剧情 JSON</button>
+              <button class="primary-button" id="storyVideoExportButton" type="button">导出剧情视频 · 1080p</button>
+            </div>
+          </header>
+
+          <div class="story-export-status" id="storyExportStatus" aria-live="polite" hidden>
+            <span id="storyExportStatusText">正在准备导出</span>
+            <progress id="storyExportProgress" max="1" value="0"></progress>
+          </div>
+
+          <div class="story-project-bar">
+            <label class="story-field story-project-name">
+              <span>剧情名称</span>
+              <input id="storyProjectName" type="text" maxlength="80" placeholder="未命名剧情" />
+            </label>
+            <label class="story-field">
+              <span>画面比例</span>
+              <select id="storyAspectSelect">
+                <option value="16:9">横屏 16:9</option>
+                <option value="9:16">竖屏 9:16</option>
+              </select>
+            </label>
+            <label class="story-field story-font-field">
+              <span>预览字体</span>
+              <select id="storyFontSelect" aria-label="选择剧情预览字体">
+                <option value="system">系统默认</option>
+                <option value="fgo-story">FGO Story</option>
+                <option value="font-2">字体 2 · OTF</option>
+                <option value="font-3">字体 3 · OTF</option>
+                <option value="font-4">字体 4 · OTF</option>
+                <option value="font-5">字体 5 · OTF</option>
+                <option value="font-fzlthjw">FZLTHJW · TTF</option>
+                <option value="font-reeji">瑞锦云峰宋 · TTF</option>
+                <option value="font-simsun">宋体 · TTC</option>
+                <option value="font-fzxiaobiao">方正小标宋 · TTF</option>
+                <option value="font-fzzhengzhong">方正正中黑 · TTF</option>
+              </select>
+            </label>
+            <span class="story-project-save-status" id="storyProjectSaveStatus" aria-live="polite">正在准备本地作品库</span>
+            <button class="primary-button" id="storyAddSceneButton" type="button">新增分镜</button>
+          </div>
+
+          <div class="story-workspace">
+            <aside class="storyboard-panel" aria-label="分镜列表">
+              <div class="story-sidebar-tabs" id="storySidebarTabs" role="tablist" aria-label="剧情流程">
+                <button class="is-active" type="button" data-story-sidebar="scenes" role="tab" aria-selected="true">分镜 <span id="storySceneCount">0</span></button>
+                <button type="button" data-story-sidebar="dialogues" role="tab" aria-selected="false">对话 <span id="storySidebarDialogueCount">0</span></button>
+              </div>
+              <section class="story-sidebar-panel is-active" data-story-sidebar-panel="scenes" aria-label="分镜列表">
+                <div class="storyboard-heading">
+                  <strong>场景流程</strong>
+                  <span>选择要编辑的场景</span>
+                </div>
+                <div class="story-scene-list" id="storySceneList"></div>
+              </section>
+              <section class="story-sidebar-panel" data-story-sidebar-panel="dialogues" aria-label="对话流程" hidden>
+                <div class="storyboard-heading">
+                  <div>
+                    <strong>对话流程</strong>
+                    <span id="storyDialogueSummary">点击跳转到段落</span>
+                  </div>
+                  <button class="icon-button story-add-dialogue-button" id="storyAddDialogueButton" type="button" title="新增对话" aria-label="新增对话">+</button>
+                </div>
+                <div class="story-dialogue-list story-dialogue-sidebar-list" id="storyDialogueList" aria-label="当前画面对话段落"></div>
+              </section>
+            </aside>
+
+            <section class="story-editor-panel">
+              <div class="story-live-preview" id="storyLivePreview">
+                <div class="story-preview-toolbar">
+                  <span id="storyActiveSceneLabel">分镜 1</span>
+                  <div>
+                    <button class="icon-button" id="storyPlayButton" type="button" title="播放当前分镜" aria-label="播放当前分镜">&#x25b6;</button>
+                    <button class="icon-button" id="storyDuplicateSceneButton" type="button" title="复制当前分镜" aria-label="复制当前分镜">&#x2398;</button>
+                    <button class="icon-button" id="storyDeleteSceneButton" type="button" title="删除当前分镜" aria-label="删除当前分镜">&#x232b;</button>
+                  </div>
+                </div>
+                <div class="story-preview-frame" id="storyPreviewFrame">
+                  <canvas id="storyCanvas" width="960" height="540"></canvas>
+                  <div class="story-preview-empty" id="storyPreviewEmpty">先选择背景或人物资源</div>
+                </div>
+              </div>
+
+              <nav class="story-tool-tabs" id="storyToolTabs" aria-label="剧情编辑功能">
+                <button type="button" data-story-tool="resources" aria-selected="false">画面素材 <span id="storyActorToolCount">0</span></button>
+                <button class="is-active" type="button" data-story-tool="dialogue" aria-selected="true">对话与表情 <span id="storyDialogueToolCount">1</span></button>
+                <button type="button" data-story-tool="animation" aria-selected="false">动画 <span id="storyAnimationToolCount">0</span></button>
+              </nav>
+
+              <section class="story-tool-panel" data-story-tool-panel="resources" hidden>
+                <div class="story-resource-actions">
+                  <button class="secondary-button" id="storyChooseBackgroundButton" type="button">选择剧情图片</button>
+                  <button class="secondary-button" id="storyChooseActorButton" type="button">选择剧情人物</button>
+                  <label class="secondary-button story-file-button" title="导入本地 BGM">
+                    导入本地 BGM
+                    <input id="storyBgmFileInput" type="file" accept="audio/*" hidden />
+                  </label>
+                  <button class="secondary-button" id="storyChooseBgmButton" type="button">选择 BGM</button>
+                  <button class="secondary-button" id="storyClearBgmButton" type="button">清除 BGM</button>
+                  <span class="story-resource-bgm-status" id="storyBgmStatus" aria-live="polite"></span>
+                  <span id="storyResourceHint">每个画面共用背景和人物，可在下方连续新增多段对话。</span>
+                </div>
+                <div class="story-resource-summary" id="storyResourceSummary" aria-live="polite"></div>
+              <section class="story-cast-panel story-actor-options-panel" id="storyActorOptionsPanel" aria-labelledby="storyActorOptionsTitle">
+                <div class="story-cast-heading">
+                  <strong id="storyActorOptionsTitle">人物位置与名称</strong>
+                  <span id="storyActorOptionsSummary">请选择要调整的人物</span>
+                </div>
+                <div class="story-actor-adjust-tabs" role="tablist" aria-label="人物调整模式">
+                  <button type="button" data-actor-adjust-mode="individual" aria-selected="true">单独调整</button>
+                  <button type="button" data-actor-adjust-mode="uniform" aria-selected="false">统一调整</button>
+                </div>
+                <label class="story-actor-options-dropdown">
+                  <span>调整人物</span>
+                  <select id="storyActorOptionsSelect" aria-label="选择要调整通用选项的人物"></select>
+                </label>
+                <div class="story-actor-options-layout">
+                  <div class="story-actor-options-list" id="storyActorOptionsList" aria-label="人物通用选项选择"></div>
+                  <div class="story-actor-transform" id="storyActorTransformPanel" hidden>
+                  <div class="story-actor-transform-heading">
+                    <span>调整选中人物</span>
+                    <strong id="storyActorTransformName"></strong>
+                  </div>
+                  <label class="story-actor-name-field">
+                    <span>人物名称</span>
+                    <input id="storyActorNameInput" type="text" maxlength="40" placeholder="输入人物名称" />
+                  </label>
+                  <div class="story-actor-transform-grid">
+                    <label class="story-transform-field">
+                      <span>大小 <output id="storyActorScaleValue" for="storyActorScaleInput">100%</output></span>
+                      <input id="storyActorScaleInput" type="range" min="0.5" max="2" step="0.05" value="1" />
+                    </label>
+                    <label class="story-transform-field">
+                      <span>横向位置 <output id="storyActorOffsetXValue" for="storyActorOffsetXInput">0%</output></span>
+                      <input id="storyActorOffsetXInput" type="range" min="-0.5" max="0.5" step="0.01" value="0" />
+                    </label>
+                    <label class="story-transform-field">
+                      <span>纵向位置 <output id="storyActorOffsetYValue" for="storyActorOffsetYInput">0%</output></span>
+                      <input id="storyActorOffsetYInput" type="range" min="-0.5" max="0.5" step="0.01" value="0" />
+                    </label>
+                  </div>
+                  <button class="secondary-button story-transform-reset" id="storyActorTransformResetButton" type="button">恢复默认大小与位置</button>
+                  <button class="secondary-button story-actor-remove-selected" id="storyActorRemoveSelectedButton" type="button">移除选中人物</button>
+                  </div>
+                  <section class="story-actor-uniform" id="storyActorUniformPanel" hidden aria-label="统一调整人物">
+                    <div class="story-actor-transform-heading">
+                      <span>基于各人物现有比例和位置统一调整</span>
+                      <strong id="storyActorUniformSummary">0 位人物</strong>
+                    </div>
+                    <div class="story-actor-transform-grid">
+                      <label class="story-transform-field">
+                        <span>统一缩放倍率 <output id="storyActorUniformScaleValue" for="storyActorUniformScaleInput">100%</output></span>
+                        <input id="storyActorUniformScaleInput" type="range" min="0.5" max="2" step="0.05" value="1" />
+                      </label>
+                      <label class="story-transform-field">
+                        <span>统一横向移动 <output id="storyActorUniformOffsetXValue" for="storyActorUniformOffsetXInput">0%</output></span>
+                        <input id="storyActorUniformOffsetXInput" type="range" min="-0.5" max="0.5" step="0.01" value="0" />
+                      </label>
+                      <label class="story-transform-field">
+                        <span>统一纵向移动 <output id="storyActorUniformOffsetYValue" for="storyActorUniformOffsetYInput">0%</output></span>
+                        <input id="storyActorUniformOffsetYInput" type="range" min="-0.5" max="0.5" step="0.01" value="0" />
+                      </label>
+                    </div>
+                    <button class="secondary-button story-transform-reset" id="storyActorUniformResetButton" type="button">撤销本次统一调整</button>
+                  </section>
+                </div>
+              </section>
+              </section>
+
+              <section class="story-tool-panel" data-story-tool-panel="animation" hidden>
+                <section class="story-cast-panel story-animation-panel" aria-labelledby="storyAnimationTitle">
+                  <div class="story-cast-heading">
+                    <strong id="storyAnimationTitle">人物动画</strong>
+                    <span id="storyAnimationSummary">请选择要设置动画的人物</span>
+                  </div>
+                  <label class="story-actor-options-dropdown story-animation-dropdown">
+                    <span>设置人物</span>
+                    <select id="storyAnimationActorSelect" aria-label="选择要设置动画的人物"></select>
+                  </label>
+                  <div class="story-actor-options-layout">
+                    <div class="story-actor-options-list" id="storyAnimationActorList" aria-label="动画人物选择"></div>
+                    <div class="story-actor-animation-controls" id="storyActorAnimationPanel" hidden>
+                      <div class="story-actor-transform-heading">
+                        <span>设置选中人物的动画</span>
+                        <strong id="storyActorAnimationName"></strong>
+                      </div>
+                      <label class="story-animation-field">
+                        <span>入场效果</span>
+                        <select id="storyActorEntryAnimationSelect">
+                          <option value="cut">直接出现</option>
+                          <option value="fade">人物淡入</option>
+                          <option value="slide-left">从左滑入</option>
+                          <option value="slide-right">从右滑入</option>
+                          <option value="flash">人物闪白</option>
+                        </select>
+                      </label>
+                      <button class="secondary-button" id="storyPreviewActorAnimationButton" type="button">预览当前画面动画</button>
+                    </div>
+                  </div>
+                </section>
+              </section>
+
+              <section class="story-tool-panel is-active" data-story-tool-panel="dialogue">
+                <section class="story-cast-panel" aria-labelledby="storyCastTitle">
+                  <div class="story-cast-heading">
+                    <strong id="storyCastTitle">当前发言人物</strong>
+                    <span id="storyActorSummary">本段对话</span>
+                  </div>
+                  <label class="story-actor-dropdown">
+                    <span>发言人物</span>
+                    <select id="storySpeakerActorSelect" aria-label="选择当前发言人物"></select>
+                  </label>
+                </section>
+
+                <section class="story-dialogue-variants" id="storyDialogueVariantsPanel" aria-labelledby="storyDialogueVariantsTitle" hidden>
+                  <div class="story-dialogue-variants-heading">
+                    <div>
+                      <strong id="storyDialogueVariantsTitle">本段人物表情与明暗</strong>
+                      <span id="storyDialogueVariantsSummary">对话 01</span>
+                    </div>
+                    <span>仅影响当前对话段</span>
+                  </div>
+                  <div class="story-dialogue-variant-list" id="storyDialogueVariantList"></div>
+                </section>
+
+                <div class="story-properties">
+                  <div class="story-property-grid">
+                    <label class="story-field">
+                      <span>当前显示名称</span>
+                      <input id="storySpeakerInput" type="text" maxlength="40" placeholder="旁白" />
+                    </label>
+                    <label class="story-field">
+                      <span>本段时长（秒）</span>
+                      <input id="storyDurationInput" type="number" min="1" max="120" step="1" />
+                    </label>
+                  </div>
+                  <label class="story-field story-dialogue-field">
+                    <span>对话内容</span>
+                    <textarea id="storyDialogueInput" rows="4" maxlength="500" placeholder="输入当前对话段落的台词"></textarea>
+                  </label>
+                </div>
+              </section>
+            </section>
+          </div>
+        </section>
+
+        <section class="more-panel" id="morePanel" aria-labelledby="morePanelTitle" hidden>
+          <div class="more-panel-art" role="img" aria-label="更多功能待开发"></div>
+          <div class="more-panel-content">
+            <span class="section-kicker">COMING SOON</span>
+            <h1 id="morePanelTitle">更多功能待开发</h1>
+            <p>新的素材工具正在规划中，当前入口暂不提供具体功能。</p>
+            <button class="primary-button" id="moreBackHomeButton" type="button">返回主界面</button>
+          </div>
+        </section>
+      </main>
+
+      <div class="story-project-library" id="storyProjectLibrary" role="dialog" aria-modal="true" aria-labelledby="storyProjectLibraryTitle" hidden>
+        <button class="story-project-library-backdrop" id="storyProjectLibraryBackdrop" type="button" aria-label="关闭本地作品库"></button>
+        <section class="story-project-library-panel">
+          <header class="story-project-library-header">
+            <div>
+              <span class="section-kicker">LOCAL PROJECTS</span>
+              <h2 id="storyProjectLibraryTitle">我的剧情</h2>
+              <p>作品仅保存在当前设备，卸载应用前请生成备份。</p>
+            </div>
+            <button class="icon-button" id="storyProjectLibraryCloseButton" type="button" title="关闭本地作品库" aria-label="关闭本地作品库">&times;</button>
+          </header>
+          <div class="story-project-library-toolbar">
+            <div class="story-project-library-tabs" id="storyProjectLibraryTabBar" role="tablist" aria-label="作品库分类">
+              <button class="story-project-library-tab is-active" type="button" role="tab" aria-selected="true" data-project-library-tab="projects">本地作品</button>
+              <button class="story-project-library-tab" type="button" role="tab" aria-selected="false" data-project-library-tab="trash">最近删除</button>
+            </div>
+            <div class="story-project-library-commands">
+              <button class="secondary-button" type="button" data-project-library-action="import">恢复备份</button>
+              <button class="primary-button" type="button" data-project-library-action="create">新建作品</button>
+            </div>
+          </div>
+          <div class="story-project-library-status" id="storyProjectLibraryStatus" aria-live="polite">正在读取本地作品</div>
+          <div class="story-project-library-list" id="storyProjectLibraryList"></div>
+        </section>
+      </div>
+
+      <div class="story-character-picker" id="storyCharacterPicker" role="dialog" aria-modal="true" aria-labelledby="storyCharacterPickerTitle" hidden>
+        <button class="story-picker-backdrop" id="storyPickerBackdrop" type="button" aria-label="关闭人物选择器"></button>
+        <section class="story-picker-panel">
+          <header class="story-picker-header">
+            <div>
+              <span class="section-kicker">CHARACTER SELECT</span>
+              <h2 id="storyCharacterPickerTitle">选择剧情资源</h2>
+              <p id="storyPickerDescription">搜索剧情人物或剧情图片，选择后加入当前分镜。</p>
+            </div>
+            <button class="icon-button" id="storyPickerCloseButton" type="button" title="关闭人物选择器" aria-label="关闭人物选择器">&times;</button>
+          </header>
+
+          <div class="story-picker-toolbar">
+            <div class="story-picker-tabs" role="tablist" aria-label="人物类型">
+              <button class="story-picker-tab is-active" id="storyPickerServantTab" type="button" role="tab" aria-selected="true">从者</button>
+              <button class="story-picker-tab" id="storyPickerFigureTab" type="button" role="tab" aria-selected="false">剧情人物</button>
+              <button class="story-picker-tab" id="storyPickerBackgroundTab" type="button" role="tab" aria-selected="false">剧情图片</button>
+            </div>
+            <label class="story-picker-search">
+              <span class="search-symbol" aria-hidden="true"></span>
+              <input id="storyPickerSearchInput" type="search" autocomplete="off" placeholder="搜索名称或 ID" />
+            </label>
+            <button class="secondary-button story-picker-import-button" id="storyPickerImportButton" type="button">导入本地图片</button>
+            <input id="storyPickerImportInput" type="file" accept="image/*" multiple hidden />
+            <div class="story-picker-filters" id="storyPickerFilters" hidden>
+              <label class="story-picker-filter">
+                <span>职介</span>
+                <select id="storyPickerClassSelect" aria-label="按职介筛选从者">
+                  <option value="all">全部职介</option>
+                </select>
+              </label>
+              <label class="story-picker-filter">
+                <span>星级</span>
+                <select id="storyPickerRaritySelect" aria-label="按星级筛选从者">
+                  <option value="all">全部星级</option>
+                </select>
+              </label>
+            </div>
+          </div>
+
+          <div class="story-picker-status" id="storyPickerStatus" aria-live="polite">正在读取人物数据</div>
+          <div class="story-picker-progress" id="storyPickerProgress" hidden aria-live="polite">
+            <div class="story-picker-progress-head">
+              <strong id="storyPickerProgressTitle">正在准备提取</strong>
+              <span id="storyPickerProgressCount">--</span>
+            </div>
+            <progress id="storyPickerProgressBar" max="1" value="0" aria-label="立绘差分提取进度"></progress>
+            <div class="story-picker-progress-foot">
+              <span id="storyPickerProgressPhase">正在准备图集</span>
+              <span>请保持当前窗口打开</span>
+            </div>
+          </div>
+          <div class="story-picker-step" id="storyPickerCharacterStep">
+            <div class="story-picker-grid" id="storyPickerCharacterList"></div>
+            <div class="story-picker-more" id="storyPickerCharacterMore" hidden>
+              <button class="secondary-button" type="button">加载更多人物</button>
+            </div>
+          </div>
+          <div class="story-picker-step" id="storyPickerSourceStep" hidden>
+            <div class="story-picker-step-header">
+              <button class="secondary-button" id="storyPickerBackToCharactersButton" type="button">返回人物列表</button>
+              <strong id="storyPickerSelectedCharacter"></strong>
+            </div>
+            <div class="story-picker-grid" id="storyPickerSourceList"></div>
+          </div>
+          <div class="story-picker-step" id="storyPickerVariantStep" hidden>
+            <div class="story-picker-step-header">
+              <button class="secondary-button" id="storyPickerBackToSourcesButton" type="button">返回立绘图集</button>
+              <strong id="storyPickerSelectedSource"></strong>
+              <button class="secondary-button story-picker-refresh-variants" id="storyPickerRefreshVariantsButton" type="button">重新提取</button>
+            </div>
+            <div class="story-picker-grid" id="storyPickerVariantList"></div>
+          </div>
+        </section>
+      </div>
+
+      <div class="story-bgm-picker" id="storyBgmPicker" role="dialog" aria-modal="true" aria-labelledby="storyBgmPickerTitle" hidden>
+        <button class="story-picker-backdrop" id="storyBgmPickerBackdrop" type="button" aria-label="关闭 BGM 选择器"></button>
+        <section class="story-bgm-picker-panel">
+          <header class="story-picker-header">
+            <div>
+              <span class="section-kicker">AUDIO SELECT</span>
+              <h2 id="storyBgmPickerTitle">选择剧情 BGM</h2>
+              <p>曲目来自 Atlas Academy 数据库，选择后可试听并随视频导出。</p>
+            </div>
+            <button class="icon-button" id="storyBgmPickerCloseButton" type="button" title="关闭 BGM 选择器" aria-label="关闭 BGM 选择器">&times;</button>
+          </header>
+          <div class="story-bgm-picker-toolbar">
+            <label class="story-picker-search">
+              <span aria-hidden="true">⌕</span>
+              <input id="storyBgmSearchInput" type="search" autocomplete="off" placeholder="搜索曲名或文件名" />
+            </label>
+            <span class="story-bgm-picker-region" id="storyBgmPickerRegion">JP</span>
+          </div>
+          <div class="story-bgm-picker-status" id="storyBgmPickerStatus" aria-live="polite">正在读取 BGM 目录</div>
+          <div class="story-bgm-list" id="storyBgmList"></div>
+          <footer class="story-bgm-picker-footer">
+            <audio id="storyBgmPreviewAudio" controls preload="none"></audio>
+            <span id="storyBgmPreviewLabel">选择曲目后试听</span>
+          </footer>
+        </section>
+      </div>
+
+      <footer>
+        <span>所有数据来源于阿特拉斯院数据库</span>
+        <span class="footer-links">
+          <a href="https://api.atlasacademy.io/docs" target="_blank" rel="noreferrer">API 文档 &#x2197;</a>
+          <a href="https://apps.atlasacademy.io/db" target="_blank" rel="noreferrer">打开原数据库 &#x2197;</a>
+        </span>
+      </footer>
+    </div>
+
+    <div class="modal" id="assetModal" role="dialog" aria-modal="true" aria-labelledby="modalTitle" hidden>
+      <button class="modal-backdrop" type="button" data-close-modal aria-label="关闭预览"></button>
+      <section class="modal-panel">
+        <header class="modal-header">
+          <div class="modal-heading">
+            <span class="modal-eyebrow" id="modalEyebrow"></span>
+            <h2 id="modalTitle">资源预览</h2>
+          </div>
+          <button class="icon-button close-button" type="button" data-close-modal aria-label="关闭" title="关闭">
+            &times;
+          </button>
+        </header>
+
+        <div class="modal-body">
+          <div class="preview-column">
+            <div class="asset-type-tabs" id="assetTypeTabs" role="tablist" aria-label="图片类型"></div>
+
+            <div class="expression-toolbar" id="expressionToolbar" hidden>
+              <div class="expression-progress-copy">
+                <strong id="expressionSummary">等待提取</strong>
+                <span id="expressionStatus">--</span>
+              <progress id="expressionProgress" max="1" value="0"></progress>
+              </div>
+              <button class="primary-button" id="extractExpressionsButton" type="button">一键提取全部</button>
+              <button class="secondary-button linked-figure-button" id="linkedFigureButton" type="button" hidden>
+                获取当前图集立绘
+              </button>
+            </div>
+
+            <div class="preview-stage" id="previewStage">
+              <div class="preview-loading" id="previewLoading">
+                <span></span><span></span><span></span>
+              </div>
+              <img id="previewImage" alt="" />
+              <div class="preview-error" id="previewError" hidden>图片载入失败</div>
+            </div>
+
+            <div class="asset-strip-header">
+              <span id="assetPosition">-- / --</span>
+              <span id="assetGroupLabel"></span>
+            </div>
+            <div class="asset-thumbnails" id="assetThumbnails"></div>
+          </div>
+
+          <aside class="asset-inspector">
+            <div class="inspector-identity">
+              <img id="inspectorFace" alt="" />
+              <div>
+                <span id="inspectorMeta"></span>
+                <strong id="inspectorName"></strong>
+                <small id="inspectorOriginalName"></small>
+              </div>
+            </div>
+
+            <dl class="asset-facts">
+              <div><dt>资源类型</dt><dd id="factType">--</dd></div>
+              <div><dt>图片尺寸</dt><dd id="factDimensions">--</dd></div>
+              <div><dt>文件名称</dt><dd id="factFilename">--</dd></div>
+              <div><dt>数据区域</dt><dd id="factRegion">--</dd></div>
+            </dl>
+
+            <div class="asset-actions">
+              <button class="primary-button expression-quick-button" id="expressionQuickButton" type="button" hidden>
+                一键获取表情差分
+              </button>
+              <button class="primary-button figure-quick-button" id="figureQuickButton" type="button" hidden>
+                一键获取立绘差分
+              </button>
+              <button class="primary-button" id="currentSheetExpressionButton" type="button" hidden>
+                仅提取当前图集表情
+              </button>
+              <button class="secondary-button" id="currentSheetFigureButton" type="button" hidden>
+                仅提取当前图集立绘
+              </button>
+              <button class="secondary-button" id="downloadAllExpressionsButton" type="button" hidden>
+                保存全部差分 ZIP
+              </button>
+              <button class="primary-button" id="downloadButton" type="button">保存当前图片</button>
+              <button class="secondary-button" id="copyButton" type="button">复制链接</button>
+              <a class="secondary-button" id="openOriginalLink" href="#" target="_blank" rel="noreferrer">打开原图 &#x2197;</a>
+            </div>
+
+            <div class="record-navigation">
+              <button id="previousRecordButton" type="button"><span aria-hidden="true">&#x2190;</span> 上一项</button>
+              <button id="nextRecordButton" type="button">下一项 <span aria-hidden="true">&#x2192;</span></button>
+            </div>
+          </aside>
+        </div>
+      </section>
+    </div>
+
+    <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+    <script src="story-picker.js?v=20260825-picker-reset-1" defer></script>
+    <script src="story-renderer.js?v=20260825-vertical-dialogue-3" defer></script>
+    <script src="app.js?v=20260826-local-images-1" defer></script>
+  </body>
+</html>
+

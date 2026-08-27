@@ -1,0 +1,24 @@
+{
+  "name": "如数迦贞",
+  "short_name": "如数迦贞",
+  "description": "FGO 图片素材浏览与剧情生成工具",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#101214",
+  "theme_color": "#101214",
+  "icons": [
+    {
+      "src": "assets/app-icon-source.jpg",
+      "sizes": "192x192",
+      "type": "image/jpeg",
+      "purpose": "any"
+    },
+    {
+      "src": "assets/app-icon-source.jpg",
+      "sizes": "512x512",
+      "type": "image/jpeg",
+      "purpose": "any maskable"
+    }
+  ]
+}
