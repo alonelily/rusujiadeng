@@ -322,6 +322,18 @@
       })).then(() => entries);
     }
 
+    function clearImageCache() {
+      imageCache.forEach((entry) => {
+        if (!entry || !entry.image) {
+          return;
+        }
+        entry.image.onload = null;
+        entry.image.onerror = null;
+        entry.image.src = "";
+      });
+      imageCache.clear();
+    }
+
     function drawDialogue(context, scene, width, height, aspect, normalizedProgress, alpha) {
       if (!scene.dialogue.text && !scene.dialogue.speaker) {
         return;
@@ -517,6 +529,7 @@
     return {
       render,
       preload,
+      clearImageCache,
       setFont,
       getFont: () => ({ key: activeFontKey, family: activeFontFamily, label: getFontOption(activeFontKey).label })
     };

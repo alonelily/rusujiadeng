@@ -2624,15 +2624,34 @@
       && window.Capacitor.isNativePlatform());
   }
 
+  const NATIVE_SAVE_CHUNK_SIZE = 2 * 1024 * 1024;
+
   async function saveBlob(blob, filename, dialogTitle) {
     if (isNativeApp() && typeof window.Capacitor.nativePromise === "function") {
-      const base64 = await blobToBase64(blob);
-      const writeResult = await window.Capacitor.nativePromise("Filesystem", "writeFile", {
-        path: filename,
-        data: base64,
-        directory: "CACHE"
-      });
-      const fileUri = writeResult.uri || (await window.Capacitor.nativePromise("Filesystem", "getUri", {
+      if (!(blob instanceof Blob) || !blob.size) {
+        throw new Error("无法保存空文件");
+      }
+      let writeResult = null;
+      // Filesystem accepts base64, so keep each bridge request small. A single
+      // whole-video conversion can temporarily require several times the Blob
+      // size and causes low-memory Android WebViews to be killed.
+      for (let offset = 0; offset < blob.size; offset += NATIVE_SAVE_CHUNK_SIZE) {
+        const chunk = blob.slice(offset, Math.min(blob.size, offset + NATIVE_SAVE_CHUNK_SIZE));
+        const base64 = await blobToBase64(chunk);
+        const method = offset === 0 ? "writeFile" : "appendFile";
+        const result = await window.Capacitor.nativePromise("Filesystem", method, {
+          path: filename,
+          data: base64,
+          directory: "CACHE"
+        });
+        if (offset === 0) {
+          writeResult = result;
+        }
+        // Let the WebView release the previous base64 string before the next
+        // bridge call when exporting a large video.
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }
+      const fileUri = writeResult && writeResult.uri || (await window.Capacitor.nativePromise("Filesystem", "getUri", {
         path: filename,
         directory: "CACHE"
       })).uri;
@@ -5875,6 +5894,75 @@
     ]).filter(Boolean);
   }
 
+  function getStorySceneAssetUrls(scene) {
+    if (!scene) {
+      return [];
+    }
+    return [
+      scene.background && scene.background.url,
+      ...(scene.actors || []).map((actor) => actor && actor.url),
+      ...getStoryDialogues(scene).flatMap((dialogue) =>
+        Object.values(dialogue.actorVariants || {}).map((variant) => variant && variant.url)
+      )
+    ].filter(Boolean);
+  }
+
+  function appendStoryOutputPart(parts, data, position) {
+    const start = Math.max(0, Number(position) || 0);
+    const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
+    parts.push({ start, end: start + bytes.byteLength, data: bytes });
+  }
+
+  function getStoryOutputBlob(parts, mimeType) {
+    const ordered = parts.slice().sort((left, right) => left.start - right.start);
+    if (!ordered.length) {
+      return null;
+    }
+    let contiguous = ordered[0].start === 0;
+    let end = ordered[0].end;
+    for (let index = 1; index < ordered.length; index += 1) {
+      const part = ordered[index];
+      if (part.start !== end) {
+        contiguous = false;
+        break;
+      }
+      end = part.end;
+    }
+    if (contiguous) {
+      return new Blob(ordered.map((part) => part.data), { type: mimeType });
+    }
+
+    // Some older muxers may emit overlapping or sparse writes. Keep that
+    // compatibility path, but only pay the merge cost when it is required.
+    const merged = new Uint8Array(Math.max(...ordered.map((part) => part.end)));
+    ordered.forEach((part) => merged.set(part.data, part.start));
+    return new Blob([merged], { type: mimeType });
+  }
+
+  function createStoryOutputTarget(media, mimeType) {
+    if (typeof media.StreamTarget !== "function" || typeof WritableStream !== "function") {
+      const target = new media.BufferTarget();
+      return {
+        target,
+        getBlob: () => target.buffer && new Blob([target.buffer], { type: mimeType })
+      };
+    }
+    const parts = [];
+    const writable = new WritableStream({
+      write: (chunk) => {
+        appendStoryOutputPart(parts, chunk.data, chunk.position);
+      }
+    });
+    const target = new media.StreamTarget(writable, {
+      chunked: true,
+      chunkSize: 4 * 1024 * 1024
+    });
+    return {
+      target,
+      getBlob: () => getStoryOutputBlob(parts, mimeType)
+    };
+  }
+
   let storyMediaModulePromise = null;
 
   function loadStoryMediaModule() {
@@ -6171,10 +6259,11 @@
     const frameRate = 30;
     const frameDuration = 1 / frameRate;
     const totalFrames = Math.max(1, Math.ceil(totalDuration * frameRate));
-    const target = new media.BufferTarget();
+    const outputTarget = createStoryOutputTarget(media, profile.mimeType);
+    const target = outputTarget.target;
     const output = new media.Output({
       format: profile.container === "mp4"
-        ? new media.Mp4OutputFormat({ fastStart: false })
+        ? new media.Mp4OutputFormat({ fastStart: "fragmented" })
         : new media.WebMOutputFormat(),
       target
     });
@@ -6212,10 +6301,31 @@
     try {
       await output.start();
       const segments = getStoryTimelineSegments(project);
+      let loadedScene = null;
       const encodeVideo = async () => {
         for (let frameIndex = 0; frameIndex < totalFrames; frameIndex += 1) {
           const timestamp = frameIndex * frameDuration;
           const duration = Math.min(frameDuration, Math.max(0.000001, totalDuration - timestamp));
+          let cursor = 0;
+          let activeSegment = segments[segments.length - 1];
+          for (let segmentIndex = 0; segmentIndex < segments.length; segmentIndex += 1) {
+            const candidate = segments[segmentIndex];
+            if (timestamp < cursor + candidate.duration || segmentIndex === segments.length - 1) {
+              activeSegment = candidate;
+              break;
+            }
+            cursor += candidate.duration;
+          }
+          if (activeSegment.scene !== loadedScene) {
+            if (loadedScene && typeof renderer.clearImageCache === "function") {
+              renderer.clearImageCache();
+            }
+            const preloaded = await renderer.preload(getStorySceneAssetUrls(activeSegment.scene));
+            if (preloaded.some((entry) => entry.failed)) {
+              throw new Error("部分分镜图片加载失败，无法完整导出视频");
+            }
+            loadedScene = activeSegment.scene;
+          }
           renderStoryTimelineFrame(renderer, segments, timestamp);
           await videoSource.add(timestamp, duration);
           if (frameIndex % 5 === 0 || frameIndex === totalFrames - 1) {
@@ -6240,11 +6350,12 @@
       }
       throw error;
     }
-    if (!target.buffer || !target.buffer.byteLength) {
+    const blob = outputTarget.getBlob();
+    if (!blob || !blob.size) {
       throw new Error("视频编码器未生成有效数据");
     }
     return {
-      blob: new Blob([target.buffer], { type: profile.mimeType }),
+      blob,
       info: {
         encoder: "webcodecs",
         codec: profile.codec,
@@ -6275,6 +6386,7 @@
     let canvasStream = null;
     let exportAudio = null;
     let recorder = null;
+    let exportRenderer = null;
     let exportStage = setStoryExportStage("restoring-assets");
     try {
       updateStoryExportProgress(0, "正在恢复立绘资源");
@@ -6294,7 +6406,7 @@
         return projectTotal + getStoryDialogues(scene).reduce((sceneTotal, dialogue) => sceneTotal + dialogue.duration, 0);
       }, 0);
       const exportCanvas = document.createElement("canvas");
-      const exportRenderer = window.FgoStoryRenderer.createRenderer({
+      exportRenderer = window.FgoStoryRenderer.createRenderer({
         canvas: exportCanvas,
         imageCache: new Map(),
         getAspect: () => project.aspect,
@@ -6340,10 +6452,14 @@
           : "当前浏览器不支持视频导出，请使用最新版 Chrome 或 Edge");
       }
       exportStage = setStoryExportStage("image-preload");
-      updateStoryExportProgress(0, "正在预加载背景与人物图片");
-      const preloaded = await exportRenderer.preload(getStoryAssetUrls(project));
-      if (preloaded.some((entry) => entry.failed)) {
-        throw new Error("部分图片资源加载失败，无法完整导出视频");
+      if (!useWebCodecs) {
+        updateStoryExportProgress(0, "正在预加载背景与人物图片");
+        const preloaded = await exportRenderer.preload(getStoryAssetUrls(project));
+        if (preloaded.some((entry) => entry.failed)) {
+          throw new Error("部分图片资源加载失败，无法完整导出视频");
+        }
+      } else {
+        updateStoryExportProgress(0, "将按分镜加载图片，降低内存占用");
       }
       if (useWebCodecs) {
         let bgmBuffer = null;
@@ -6461,6 +6577,9 @@
       updateStoryExportProgress(0, message);
       showToast(message);
     } finally {
+      if (exportRenderer && typeof exportRenderer.clearImageCache === "function") {
+        exportRenderer.clearImageCache();
+      }
       if (state.story.videoExportFrame) {
         cancelAnimationFrame(state.story.videoExportFrame);
         state.story.videoExportFrame = null;
