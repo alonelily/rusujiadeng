@@ -5929,14 +5929,18 @@
       end = part.end;
     }
     if (contiguous) {
-      return new Blob(ordered.map((part) => part.data), { type: mimeType });
+      const blob = new Blob(ordered.map((part) => part.data), { type: mimeType });
+      parts.length = 0;
+      return blob;
     }
 
     // Some older muxers may emit overlapping or sparse writes. Keep that
     // compatibility path, but only pay the merge cost when it is required.
     const merged = new Uint8Array(Math.max(...ordered.map((part) => part.end)));
     ordered.forEach((part) => merged.set(part.data, part.start));
-    return new Blob([merged], { type: mimeType });
+    const blob = new Blob([merged], { type: mimeType });
+    parts.length = 0;
+    return blob;
   }
 
   function createStoryOutputTarget(media, mimeType) {
