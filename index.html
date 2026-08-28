@@ -12,7 +12,7 @@
       content="Atlas Academy FGO 礼装与从者立绘资源浏览器"
     />
     <title>如数迦贞</title>
-    <link rel="stylesheet" href="styles.css?v=20260828-dialogue-color-ranges-1" />
+    <link rel="stylesheet" href="styles.css?v=20260828-dialogue-ruby-1" />
   </head>
   <body class="is-intro-open">
     <section class="source-intro" id="sourceIntro" role="dialog" aria-modal="true" aria-labelledby="sourceIntroTitle">
@@ -539,6 +539,22 @@
                     </div>
                     <div class="story-dialogue-color-range-list" id="storyDialogueColorRangeList"></div>
                   </div>
+                  <div class="story-dialogue-ruby-panel">
+                    <div class="story-dialogue-color-heading">
+                      <strong>对白小字</strong>
+                      <span id="storyDialogueRubySelectionValue">尚未选择文字</span>
+                    </div>
+                    <div class="story-dialogue-ruby-controls">
+                      <label class="story-field">
+                        <span>选中文字上方显示</span>
+                        <input id="storyDialogueRubyInput" type="text" maxlength="40" placeholder="输入小字内容" />
+                      </label>
+                      <button class="primary-button" id="storyDialogueRubyApplyButton" type="button">应用小字</button>
+                      <button class="secondary-button" id="storyDialogueRubyClearSelectionButton" type="button">清除所选小字</button>
+                      <button class="secondary-button" id="storyDialogueRubyResetButton" type="button">清除全部小字</button>
+                    </div>
+                    <div class="story-dialogue-ruby-list" id="storyDialogueRubyList"></div>
+                  </div>
                 </div>
               </section>
             </section>
@@ -787,8 +803,8 @@
 
     <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
     <script src="story-picker.js?v=20260825-picker-reset-1" defer></script>
-    <script src="story-renderer.js?v=20260828-dialogue-color-ranges-1" defer></script>
-    <script src="app.js?v=20260828-dialogue-color-ranges-1" defer></script>
+    <script src="story-renderer.js?v=20260828-dialogue-ruby-1" defer></script>
+    <script src="app.js?v=20260828-dialogue-ruby-1" defer></script>
   </body>
 </html>
 

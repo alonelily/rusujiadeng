@@ -3154,6 +3154,73 @@ footer a:hover {
   color: var(--text);
 }
 
+.story-dialogue-ruby-panel {
+  display: grid;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.story-dialogue-ruby-controls {
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) auto auto auto;
+  align-items: end;
+  gap: 10px;
+}
+
+.story-dialogue-ruby-controls button {
+  min-height: 38px;
+}
+
+.story-dialogue-ruby-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.story-dialogue-ruby-list:empty {
+  display: none;
+}
+
+.story-dialogue-ruby-item {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+  min-height: 30px;
+  padding: 4px 5px 4px 9px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+}
+
+.story-dialogue-ruby-item-text {
+  max-width: 230px;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.story-dialogue-ruby-item-remove {
+  display: inline-grid;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  place-items: center;
+}
+
+.story-dialogue-ruby-item-remove:hover {
+  color: var(--text);
+}
+
 @media (max-width: 640px) {
   .story-dialogue-color-heading {
     display: grid;
@@ -3165,6 +3232,14 @@ footer a:hover {
   }
 
   .story-dialogue-color-controls button {
+    width: 100%;
+  }
+
+  .story-dialogue-ruby-controls {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .story-dialogue-ruby-controls button {
     width: 100%;
   }
 }

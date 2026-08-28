@@ -117,8 +117,29 @@
     return colors;
   }
 
-  function drawDialogueLine(context, line, x, y, layout, textColors) {
+  function getDialogueTextRubyRanges(dialogue, visibleLength) {
+    const textLength = Array.from(String(dialogue.text || "")).length;
+    const maxVisible = Math.max(0, Math.min(textLength, visibleLength == null ? textLength : visibleLength));
+    if (!Array.isArray(dialogue.textRubyRanges)) {
+      return [];
+    }
+    return dialogue.textRubyRanges.flatMap((range) => {
+      if (!range || typeof range !== "object") {
+        return [];
+      }
+      const start = Math.max(0, Math.min(textLength, Math.floor(Number(range.start) || 0)));
+      const end = Math.max(start, Math.min(textLength, Math.floor(Number(range.end) || 0)));
+      const ruby = String(range.ruby || range.text || "").trim();
+      return end > start && end <= maxVisible && ruby ? [{ start, end, ruby }] : [];
+    });
+  }
+
+  function drawDialogueLine(context, line, x, y, layout, textColors, textRubyRanges, fontFamily) {
     const characters = Array.from(line.text);
+    const baseFont = context.font;
+    const characterWidths = characters.map((character) => context.measureText(character).width);
+    const characterOffsets = [0];
+    characterWidths.forEach((width) => characterOffsets.push(characterOffsets[characterOffsets.length - 1] + width));
     let offset = 0;
     let segmentStart = 0;
     let segmentColor = textColors[line.start] || null;
@@ -153,6 +174,57 @@
       }
     }
     drawSegment(characters.length);
+
+    if (!textRubyRanges.length) {
+      return;
+    }
+    context.save();
+    context.textAlign = "center";
+    context.textBaseline = "alphabetic";
+    context.font = `500 ${Math.max(10, Math.round(layout.dialogueFontSize * 0.48))}px ${fontFamily}`;
+    textRubyRanges.forEach((range) => {
+      // Keep a ruby annotation on one visual line. A phrase that wraps is
+      // still rendered above the line where it starts instead of duplicating
+      // the annotation on every wrapped line.
+      if (range.start < line.start || range.start >= line.end) {
+        return;
+      }
+      const rangeStart = range.start;
+      const rangeEnd = Math.min(line.end, range.end);
+      if (rangeEnd <= rangeStart) {
+        return;
+      }
+      const localStart = rangeStart - line.start;
+      const localEnd = rangeEnd - line.start;
+      const spanStartX = x + characterOffsets[localStart];
+      const spanEndX = x + characterOffsets[localEnd];
+      const centerX = (spanStartX + spanEndX) / 2;
+      const rubySize = fitFontSize(
+        context,
+        range.ruby,
+        Math.max(10, layout.dialogueFontSize * 0.48),
+        Math.max(8, layout.dialogueFontSize * 0.28),
+        Math.max(1, spanEndX - spanStartX),
+        500,
+        fontFamily
+      );
+      context.font = `500 ${rubySize}px ${fontFamily}`;
+      context.strokeStyle = "rgb(7 27 58 / 86%)";
+      context.lineWidth = Math.max(0.75, 0.9 * layout.scale);
+      context.shadowColor = "rgb(0 0 0 / 34%)";
+      context.shadowBlur = Math.max(0.35, 0.55 * layout.scale);
+      context.shadowOffsetX = Math.max(0.15, 0.3 * layout.scale);
+      context.shadowOffsetY = Math.max(0.2, 0.4 * layout.scale);
+      setDialogueGradient(
+        context,
+        centerX,
+        y - layout.dialogueFontSize * 1.12,
+        y - layout.dialogueFontSize * 0.58
+      );
+      drawOutlinedText(context, range.ruby, centerX, y - Math.max(7, layout.dialogueFontSize * 0.52));
+    });
+    context.restore();
+    context.font = baseFont;
   }
 
   function fitFontSize(context, text, preferredSize, minimumSize, maxWidth, weight, fontFamily) {
@@ -466,9 +538,11 @@
       context.font = `500 ${Math.round(layout.dialogueFontSize)}px ${activeFontFamily}`;
       const maxDialogueLines = aspect === "9:16" ? 3 : 2;
       const textColors = getDialogueTextColors(scene.dialogue);
+      const visibleLength = Array.from(visibleText).length;
+      const textRubyRanges = getDialogueTextRubyRanges(scene.dialogue, visibleLength);
       getWrappedLineObjects(context, visibleText, layout.textWidth, maxDialogueLines).forEach((line, index) => {
         const lineY = layout.textY + index * layout.lineHeight;
-        drawDialogueLine(context, line, layout.textX, lineY, layout, textColors);
+        drawDialogueLine(context, line, layout.textX, lineY, layout, textColors, textRubyRanges, activeFontFamily);
       });
       context.shadowColor = "transparent";
       context.shadowBlur = 0;

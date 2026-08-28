@@ -264,6 +264,12 @@
     storyDialogueColorClearSelectionButton: document.getElementById("storyDialogueColorClearSelectionButton"),
     storyDialogueColorResetButton: document.getElementById("storyDialogueColorResetButton"),
     storyDialogueColorRangeList: document.getElementById("storyDialogueColorRangeList"),
+    storyDialogueRubySelectionValue: document.getElementById("storyDialogueRubySelectionValue"),
+    storyDialogueRubyInput: document.getElementById("storyDialogueRubyInput"),
+    storyDialogueRubyApplyButton: document.getElementById("storyDialogueRubyApplyButton"),
+    storyDialogueRubyClearSelectionButton: document.getElementById("storyDialogueRubyClearSelectionButton"),
+    storyDialogueRubyResetButton: document.getElementById("storyDialogueRubyResetButton"),
+    storyDialogueRubyList: document.getElementById("storyDialogueRubyList"),
     storyBgmStatus: document.getElementById("storyBgmStatus"),
     storyBgmFileInput: document.getElementById("storyBgmFileInput"),
     storyChooseBgmButton: document.getElementById("storyChooseBgmButton"),
@@ -2833,6 +2839,7 @@
         value.textColorStart,
         value.textColor
       ),
+      textRubyRanges: normalizeStoryTextRubyRanges(value.textRubyRanges, text),
       actorVariants: normalizeStoryDialogueVariants(value.actorVariants),
       actorColorModes: normalizeStoryDialogueColorModes(value.actorColorModes)
     };
@@ -2935,6 +2942,78 @@
       ...oldColors.slice(oldChangeEnd)
     ];
     return compactStoryTextColors(nextColors.slice(0, newCharacters.length));
+  }
+
+  function normalizeStoryTextRubyRanges(value, text) {
+    const textLength = Array.from(String(text || "")).length;
+    if (!Array.isArray(value)) {
+      return [];
+    }
+    const ranges = value.flatMap((range) => {
+      if (!range || typeof range !== "object") {
+        return [];
+      }
+      const start = Math.max(0, Math.min(textLength, Math.floor(Number(range.start) || 0)));
+      const end = Math.max(start, Math.min(textLength, Math.floor(Number(range.end) || 0)));
+      const ruby = String(range.ruby || range.text || "").trim().slice(0, 40);
+      return end > start && ruby ? [{ start, end, ruby }] : [];
+    });
+    ranges.sort((left, right) => left.start - right.start || left.end - right.end);
+    const normalized = [];
+    ranges.forEach((range) => {
+      const previous = normalized[normalized.length - 1];
+      if (previous && range.start < previous.end) {
+        return;
+      }
+      normalized.push(range);
+    });
+    return normalized;
+  }
+
+  function getStoryTextEditBounds(oldText, newText) {
+    const oldCharacters = Array.from(String(oldText || ""));
+    const newCharacters = Array.from(String(newText || ""));
+    let prefixLength = 0;
+    while (
+      prefixLength < oldCharacters.length &&
+      prefixLength < newCharacters.length &&
+      oldCharacters[prefixLength] === newCharacters[prefixLength]
+    ) {
+      prefixLength += 1;
+    }
+    let suffixLength = 0;
+    while (
+      suffixLength < oldCharacters.length - prefixLength &&
+      suffixLength < newCharacters.length - prefixLength &&
+      oldCharacters[oldCharacters.length - suffixLength - 1] === newCharacters[newCharacters.length - suffixLength - 1]
+    ) {
+      suffixLength += 1;
+    }
+    return {
+      oldLength: oldCharacters.length,
+      newLength: newCharacters.length,
+      oldStart: prefixLength,
+      oldEnd: oldCharacters.length - suffixLength,
+      newEnd: newCharacters.length - suffixLength
+    };
+  }
+
+  function updateStoryTextRubyRangesForEdit(oldText, newText, ranges) {
+    const edit = getStoryTextEditBounds(oldText, newText);
+    const delta = edit.newLength - edit.oldLength;
+    const nextRanges = normalizeStoryTextRubyRanges(ranges, oldText).flatMap((range) => {
+      if (range.end <= edit.oldStart) {
+        return [range];
+      }
+      if (range.start >= edit.oldEnd) {
+        return [{ ...range, start: range.start + delta, end: range.end + delta }];
+      }
+      if (edit.oldStart === edit.oldEnd && range.start < edit.oldStart && range.end > edit.oldStart) {
+        return [{ ...range, end: range.end + delta }];
+      }
+      return [];
+    });
+    return normalizeStoryTextRubyRanges(nextRanges, newText);
   }
 
   function normalizeStoryDialogueColorModes(value) {
@@ -3944,6 +4023,8 @@
       actorId: actor ? actor.assetId : null,
       speaker: actor ? getStoryActorDisplayName(actor, actorIndex) : "",
       duration: current.duration,
+      textColorRanges: current.textColorRanges,
+      textRubyRanges: current.textRubyRanges,
       actorVariants: current.actorVariants,
       actorColorModes: current.actorColorModes
     });
@@ -4833,6 +4914,11 @@
         value,
         dialogue.textColorRanges
       );
+      dialogue.textRubyRanges = updateStoryTextRubyRangesForEdit(
+        dialogue.text,
+        value,
+        dialogue.textRubyRanges
+      );
       dialogue.text = value;
       updateStoryDialogueColorControls(dialogue);
     } else if (field === "duration") {
@@ -4894,6 +4980,34 @@
     });
   }
 
+  function renderStoryDialogueRubyRanges(dialogue) {
+    dom.storyDialogueRubyList.replaceChildren();
+    const characters = Array.from(dialogue.text || "");
+    dialogue.textRubyRanges.forEach((range) => {
+      const item = document.createElement("div");
+      item.className = "story-dialogue-ruby-item";
+      item.title = `第 ${range.start + 1}–${range.end} 字`;
+      const text = document.createElement("span");
+      text.className = "story-dialogue-ruby-item-text";
+      text.textContent = `「${characters.slice(range.start, range.end).join("")}」上方：${range.ruby}`;
+      const remove = document.createElement("button");
+      remove.className = "story-dialogue-ruby-item-remove";
+      remove.type = "button";
+      remove.textContent = "×";
+      remove.setAttribute("aria-label", `清除${text.textContent}`);
+      remove.addEventListener("click", (event) => {
+        event.stopPropagation();
+        applyStoryDialogueRuby(range.start, range.end, "");
+      });
+      item.addEventListener("click", () => {
+        selectStoryDialogueTextRange(range.start, range.end);
+        dom.storyDialogueRubyInput.value = range.ruby;
+      });
+      item.append(text, remove);
+      dom.storyDialogueRubyList.append(item);
+    });
+  }
+
   function updateStoryDialogueColorControls(dialogue) {
     if (!dialogue || !dom.storyDialogueColorInput) {
       return;
@@ -4910,6 +5024,115 @@
     dom.storyDialogueColorClearSelectionButton.disabled = !hasSelection;
     dom.storyDialogueColorResetButton.disabled = dialogue.textColorRanges.length === 0;
     renderStoryDialogueColorRanges(dialogue);
+    updateStoryDialogueRubyControls(dialogue);
+  }
+
+  function updateStoryDialogueRubyControls(dialogue) {
+    if (!dialogue || !dom.storyDialogueRubyInput) {
+      return;
+    }
+    dialogue.textRubyRanges = normalizeStoryTextRubyRanges(dialogue.textRubyRanges, dialogue.text);
+    const selection = getStoryDialogueTextSelection();
+    const characters = Array.from(dialogue.text || "");
+    const hasSelection = selection.end > selection.start;
+    const selectedText = characters.slice(selection.start, selection.end).join("");
+    const selectedRange = dialogue.textRubyRanges.find((range) => (
+      range.start === selection.start && range.end === selection.end
+    ));
+    dom.storyDialogueRubySelectionValue.textContent = hasSelection
+      ? `已选择「${selectedText.length > 18 ? `${Array.from(selectedText).slice(0, 18).join("")}…` : selectedText}」`
+      : "尚未选择文字";
+    dom.storyDialogueRubyApplyButton.disabled = !hasSelection || !dom.storyDialogueRubyInput.value.trim();
+    dom.storyDialogueRubyClearSelectionButton.disabled = !hasSelection;
+    dom.storyDialogueRubyResetButton.disabled = dialogue.textRubyRanges.length === 0;
+    if (document.activeElement !== dom.storyDialogueRubyInput) {
+      dom.storyDialogueRubyInput.value = selectedRange ? selectedRange.ruby : "";
+    }
+    renderStoryDialogueRubyRanges(dialogue);
+  }
+
+  function updateStoryDialogueRubyRangesForSelection(dialogue, start, end, ruby) {
+    const nextRanges = dialogue.textRubyRanges.flatMap((range) => {
+      if (range.end <= start || range.start >= end) {
+        return [range];
+      }
+      const pieces = [];
+      if (range.start < start) {
+        pieces.push({ ...range, end: start });
+      }
+      if (range.end > end) {
+        pieces.push({ ...range, start: end });
+      }
+      return pieces;
+    });
+    if (ruby) {
+      nextRanges.push({ start, end, ruby });
+    }
+    return normalizeStoryTextRubyRanges(nextRanges, dialogue.text);
+  }
+
+  function applyStoryDialogueRuby(start, end, ruby) {
+    const scene = getActiveStoryScene();
+    const dialogue = scene && getActiveStoryDialogue(scene);
+    if (!dialogue) {
+      return;
+    }
+    const textLength = Array.from(dialogue.text || "").length;
+    const safeStart = Math.max(0, Math.min(textLength, Math.floor(Number(start) || 0)));
+    const safeEnd = Math.max(safeStart, Math.min(textLength, Math.floor(Number(end) || 0)));
+    if (safeEnd <= safeStart) {
+      return;
+    }
+    dialogue.textRubyRanges = normalizeStoryTextRubyRanges(dialogue.textRubyRanges, dialogue.text);
+    dialogue.textRubyRanges = updateStoryDialogueRubyRangesForSelection(
+      dialogue,
+      safeStart,
+      safeEnd,
+      String(ruby || "").trim().slice(0, 40)
+    );
+    updateStoryDialogueRubyControls(dialogue);
+    saveStoryProject();
+    renderStoryDialogueList(scene);
+    renderStorySceneList();
+    renderStoryCanvas(scene, 1);
+  }
+
+  function applySelectedStoryDialogueRuby() {
+    const selection = getStoryDialogueTextSelection();
+    const ruby = dom.storyDialogueRubyInput.value.trim();
+    if (selection.end <= selection.start) {
+      showToast("请先在对话内容中选择文字");
+      return;
+    }
+    if (!ruby) {
+      showToast("请输入要显示的小字内容");
+      return;
+    }
+    applyStoryDialogueRuby(selection.start, selection.end, ruby);
+  }
+
+  function clearSelectedStoryDialogueRuby() {
+    const selection = getStoryDialogueTextSelection();
+    if (selection.end <= selection.start) {
+      showToast("请先在对话内容中选择文字");
+      return;
+    }
+    applyStoryDialogueRuby(selection.start, selection.end, "");
+  }
+
+  function resetStoryDialogueRuby() {
+    const scene = getActiveStoryScene();
+    const dialogue = scene && getActiveStoryDialogue(scene);
+    if (!dialogue) {
+      return;
+    }
+    dialogue.textRubyRanges = [];
+    dom.storyDialogueRubyInput.value = "";
+    updateStoryDialogueRubyControls(dialogue);
+    saveStoryProject();
+    renderStoryDialogueList(scene);
+    renderStorySceneList();
+    renderStoryCanvas(scene, 1);
   }
 
   function applyStoryDialogueTextColor(start, end, color) {
@@ -7401,10 +7624,20 @@
         }
       });
     });
+    dom.storyDialogueRubyInput.addEventListener("input", () => {
+      const scene = getActiveStoryScene();
+      const dialogue = scene && getActiveStoryDialogue(scene);
+      if (dialogue) {
+        updateStoryDialogueRubyControls(dialogue);
+      }
+    });
     dom.storyDurationInput.addEventListener("input", () => updateStorySceneField("duration", dom.storyDurationInput.value));
     dom.storyDialogueColorApplyButton.addEventListener("click", applySelectedStoryDialogueColor);
     dom.storyDialogueColorClearSelectionButton.addEventListener("click", clearSelectedStoryDialogueColor);
     dom.storyDialogueColorResetButton.addEventListener("click", resetStoryDialogueColor);
+    dom.storyDialogueRubyApplyButton.addEventListener("click", applySelectedStoryDialogueRuby);
+    dom.storyDialogueRubyClearSelectionButton.addEventListener("click", clearSelectedStoryDialogueRuby);
+    dom.storyDialogueRubyResetButton.addEventListener("click", resetStoryDialogueRuby);
     dom.storyChooseBackgroundButton.addEventListener("click", () => chooseStoryResource("background"));
     dom.storyChooseActorButton.addEventListener("click", () => chooseStoryResource("actor"));
     dom.storyToolTabs.querySelectorAll("[data-story-tool]").forEach((button) => {
