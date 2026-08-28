@@ -175,6 +175,9 @@
     refreshButton: document.getElementById("refreshButton"),
     storyGeneratorPanel: document.getElementById("storyGeneratorPanel"),
     storyGeneratorBackButton: document.getElementById("storyGeneratorBackButton"),
+    introSupportButton: document.getElementById("introSupportButton"),
+    supportPanel: document.getElementById("supportPanel"),
+    supportBackHomeButton: document.getElementById("supportBackHomeButton"),
     morePanel: document.getElementById("morePanel"),
     moreBackHomeButton: document.getElementById("moreBackHomeButton"),
     storyExportButton: document.getElementById("storyExportButton"),
@@ -3405,6 +3408,12 @@
     const isOpen = Boolean(open);
     dom.morePanel.hidden = !isOpen;
     document.querySelector(".app-shell").classList.toggle("is-more-open", isOpen);
+  }
+
+  function setSupportPanelOpen(open) {
+    const isOpen = Boolean(open);
+    dom.supportPanel.hidden = !isOpen;
+    document.querySelector(".app-shell").classList.toggle("is-support-open", isOpen);
   }
 
   function openStoryAssetDatabase() {
@@ -7610,6 +7619,8 @@
     dom.enterAppButton.addEventListener("click", enterApp);
     dom.enterStoryAppButton.addEventListener("click", enterStoryApp);
     dom.storyGeneratorBackButton.addEventListener("click", goHome);
+    dom.introSupportButton.addEventListener("click", enterSupportApp);
+    dom.supportBackHomeButton.addEventListener("click", goHome);
     dom.storyProjectLibraryButton.addEventListener("click", () => setStoryProjectLibraryOpen(true));
     dom.storyNewProjectButton.addEventListener("click", () => createNewStoryProject().catch(() => showToast("新建作品失败")));
     dom.storyBackupButton.addEventListener("click", () => exportStoryBackup().catch(() => showToast("剧情备份失败")));
@@ -8018,6 +8029,7 @@
     }
     setStoryGeneratorOpen(false);
     setMorePanelOpen(false);
+    setSupportPanelOpen(false);
     showSourceIntro();
   }
 
@@ -8027,6 +8039,7 @@
     }
     setStoryGeneratorOpen(false);
     setMorePanelOpen(false);
+    setSupportPanelOpen(false);
     hideSourceIntro();
   }
 
@@ -8035,6 +8048,7 @@
       return;
     }
     setMorePanelOpen(false);
+    setSupportPanelOpen(false);
     setStoryGeneratorOpen(true);
     hideSourceIntro();
   }
@@ -8044,7 +8058,18 @@
       return;
     }
     setStoryGeneratorOpen(false);
+    setSupportPanelOpen(false);
     setMorePanelOpen(true);
+    hideSourceIntro();
+  }
+
+  function enterSupportApp() {
+    if (dom.sourceIntro.hidden || dom.sourceIntro.classList.contains("is-leaving")) {
+      return;
+    }
+    setStoryGeneratorOpen(false);
+    setMorePanelOpen(false);
+    setSupportPanelOpen(true);
     hideSourceIntro();
   }
 
