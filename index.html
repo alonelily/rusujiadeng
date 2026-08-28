@@ -40,7 +40,7 @@
           <header class="intro-update-heading">
             <span>VERSION UPDATE</span>
             <strong id="updateNoticeTitle">更新公告</strong>
-            <time datetime="2026-08-26">2026.08.26</time>
+            <time datetime="2026-08-28">2026.08.28</time>
           </header>
           <ul class="intro-update-list">
             <li>
@@ -50,6 +50,18 @@
             <li>
               <strong>外部素材导入</strong>
               <span>支持导入外部剧情背景，也可将多张人物立绘作为差分集直接使用。</span>
+            </li>
+            <li>
+              <strong>对话文字样式</strong>
+              <span>支持任意文字区间自由变色，并可添加小字标注，表现更丰富的剧情台词。</span>
+            </li>
+            <li>
+              <strong>旁白分镜导出</strong>
+              <span>没有人物的分镜也可以编辑旁白并导出，人物名称不再是必填项。</span>
+            </li>
+            <li>
+              <strong>多分镜导出优化</strong>
+              <span>按分镜处理图片并降低导出过程的内存占用，减少多分镜视频导出时闪退的问题。</span>
             </li>
           </ul>
         </aside>
@@ -68,6 +80,14 @@
             <span class="intro-window-caption">
               <strong>简易剧情生成</strong>
               <small>STORY BUILDER</small>
+              <span class="intro-window-arrow" aria-hidden="true">&#x2192;</span>
+            </span>
+          </button>
+          <button class="intro-window intro-window-support" id="introSupportButton" type="button">
+            <span class="intro-window-image" aria-hidden="true"></span>
+            <span class="intro-window-caption">
+              <strong>支持该应用</strong>
+              <small>SUPPORT THE PROJECT</small>
               <span class="intro-window-arrow" aria-hidden="true">&#x2192;</span>
             </span>
           </button>
@@ -558,6 +578,23 @@
                 </div>
               </section>
             </section>
+          </div>
+        </section>
+
+        <section class="support-panel" id="supportPanel" aria-labelledby="supportPanelTitle" hidden>
+          <div class="support-panel-art">
+            <img src="assets/landing/support-wechat.jpg" alt="微信收款码" />
+          </div>
+          <div class="support-panel-content">
+            <span class="section-kicker">SUPPORT THE PROJECT</span>
+            <h1 id="supportPanelTitle">支持该应用</h1>
+            <p>如数迦贞目前由个人开发，后续会逐步完善并上线正式应用。你的支持将用于后续功能开发、服务器租用，以及改善整体使用体验。</p>
+            <p>如果你想支持这个应用，可以帮助宣传、分享给更多创作者，或通过上方微信收款码捐赠。</p>
+            <div class="support-panel-actions">
+              <a class="primary-button" href="https://docs.qq.com/sheet/DQWZSeVBXbXJRWFFB?tab=BB08J2" target="_blank" rel="noreferrer">查看支持者名单</a>
+              <button class="secondary-button" id="supportBackHomeButton" type="button">返回主界面</button>
+            </div>
+            <p class="support-panel-contact">如果有任何问题或希望退款，请联系 <a href="mailto:1725152015@qq.com">1725152015@qq.com</a>。</p>
           </div>
         </section>
 
