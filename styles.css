@@ -3081,7 +3081,7 @@ footer a:hover {
 
 .story-dialogue-color-controls {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 150px auto;
+  grid-template-columns: minmax(120px, 0.7fr) minmax(150px, 1fr) auto auto;
   align-items: end;
   gap: 10px;
 }
@@ -3091,6 +3091,67 @@ footer a:hover {
   min-height: 38px;
   padding: 3px;
   cursor: pointer;
+}
+
+.story-dialogue-color-controls button {
+  min-height: 38px;
+}
+
+.story-dialogue-color-range-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.story-dialogue-color-range-list:empty {
+  display: none;
+}
+
+.story-dialogue-color-range {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+  min-height: 30px;
+  padding: 4px 5px 4px 9px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+}
+
+.story-dialogue-color-swatch {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 auto;
+  border: 1px solid rgb(255 255 255 / 38%);
+  border-radius: 2px;
+}
+
+.story-dialogue-color-range-text {
+  max-width: 190px;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.story-dialogue-color-range-remove {
+  display: inline-grid;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  place-items: center;
+}
+
+.story-dialogue-color-range-remove:hover {
+  color: var(--text);
 }
 
 @media (max-width: 640px) {
@@ -3103,8 +3164,8 @@ footer a:hover {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   }
 
-  .story-dialogue-color-controls > button {
-    grid-column: 1 / -1;
+  .story-dialogue-color-controls button {
+    width: 100%;
   }
 }
 

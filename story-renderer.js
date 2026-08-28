@@ -92,11 +92,36 @@
     context.fillStyle = gradient;
   }
 
-  function drawDialogueLine(context, line, x, y, layout, colorStart, color) {
+  function getDialogueTextColors(dialogue) {
+    const textLength = Array.from(String(dialogue.text || "")).length;
+    const colors = Array(textLength).fill(null);
+    const ranges = Array.isArray(dialogue.textColorRanges)
+      ? dialogue.textColorRanges
+      : (() => {
+          const legacyStart = Math.max(0, Math.min(textLength, Math.floor(Number(dialogue.textColorStart) || 0)));
+          const legacyColor = /^#[0-9a-f]{6}$/i.test(String(dialogue.textColor || ""))
+            ? String(dialogue.textColor).toLowerCase()
+            : "#f3c86b";
+          return legacyStart > 0 && legacyStart < textLength
+            ? [{ start: legacyStart, end: textLength, color: legacyColor }]
+            : [];
+        })();
+    ranges.forEach((range) => {
+      if (!range || typeof range !== "object" || !/^#[0-9a-f]{6}$/i.test(String(range.color || ""))) {
+        return;
+      }
+      const start = Math.max(0, Math.min(textLength, Math.floor(Number(range.start) || 0)));
+      const end = Math.max(start, Math.min(textLength, Math.floor(Number(range.end) || 0)));
+      colors.fill(String(range.color).toLowerCase(), start, end);
+    });
+    return colors;
+  }
+
+  function drawDialogueLine(context, line, x, y, layout, textColors) {
     const characters = Array.from(line.text);
     let offset = 0;
     let segmentStart = 0;
-    let segmentUsesColor = colorStart > 0 && line.start >= colorStart;
+    let segmentColor = textColors[line.start] || null;
     const drawSegment = (end) => {
       if (end <= segmentStart) {
         return;
@@ -105,8 +130,8 @@
       if (!segment) {
         return;
       }
-      if (segmentUsesColor) {
-        context.fillStyle = color;
+      if (segmentColor) {
+        context.fillStyle = segmentColor;
       } else {
         setDialogueGradient(
           context,
@@ -120,11 +145,11 @@
     };
 
     for (let index = 0; index < characters.length; index += 1) {
-      const usesColor = colorStart > 0 && line.start + index >= colorStart;
-      if (usesColor !== segmentUsesColor) {
+      const color = textColors[line.start + index] || null;
+      if (color !== segmentColor) {
         drawSegment(index);
         segmentStart = index;
-        segmentUsesColor = usesColor;
+        segmentColor = color;
       }
     }
     drawSegment(characters.length);
@@ -440,13 +465,10 @@
       context.shadowOffsetY = Math.max(0.35, 0.65 * layout.scale);
       context.font = `500 ${Math.round(layout.dialogueFontSize)}px ${activeFontFamily}`;
       const maxDialogueLines = aspect === "9:16" ? 3 : 2;
-      const textColorStart = Math.max(0, Math.floor(Number(scene.dialogue.textColorStart) || 0));
-      const textColor = /^#[0-9a-f]{6}$/i.test(String(scene.dialogue.textColor || ""))
-        ? String(scene.dialogue.textColor)
-        : "#f3c86b";
+      const textColors = getDialogueTextColors(scene.dialogue);
       getWrappedLineObjects(context, visibleText, layout.textWidth, maxDialogueLines).forEach((line, index) => {
         const lineY = layout.textY + index * layout.lineHeight;
-        drawDialogueLine(context, line, layout.textX, lineY, layout, textColorStart, textColor);
+        drawDialogueLine(context, line, layout.textX, lineY, layout, textColors);
       });
       context.shadowColor = "transparent";
       context.shadowBlur = 0;

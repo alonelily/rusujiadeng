@@ -12,7 +12,7 @@
       content="Atlas Academy FGO 礼装与从者立绘资源浏览器"
     />
     <title>如数迦贞</title>
-    <link rel="stylesheet" href="styles.css?v=20260828-dialogue-color-1" />
+    <link rel="stylesheet" href="styles.css?v=20260828-dialogue-color-ranges-1" />
   </head>
   <body class="is-intro-open">
     <section class="source-intro" id="sourceIntro" role="dialog" aria-modal="true" aria-labelledby="sourceIntroTitle">
@@ -525,21 +525,19 @@
                   </label>
                   <div class="story-dialogue-color-panel">
                     <div class="story-dialogue-color-heading">
-                      <strong>对白颜色</strong>
-                      <span id="storyDialogueColorStartValue">关闭变色，整段使用默认颜色</span>
+                      <strong>对白局部颜色</strong>
+                      <span id="storyDialogueColorSelectionValue">尚未选择文字</span>
                     </div>
                     <div class="story-dialogue-color-controls">
-                      <label class="story-field">
-                        <span>变色起始字数</span>
-                        <input id="storyDialogueColorStartInput" type="number" min="0" max="500" step="1" value="0" />
-                      </label>
                       <label class="story-field story-color-field">
-                        <span>后半段颜色</span>
+                        <span>所选文字颜色</span>
                         <input id="storyDialogueColorInput" type="color" value="#f3c86b" />
                       </label>
-                      <button class="secondary-button" id="storyDialogueColorResetButton" type="button">恢复默认</button>
+                      <button class="primary-button" id="storyDialogueColorApplyButton" type="button">应用到选中文字</button>
+                      <button class="secondary-button" id="storyDialogueColorClearSelectionButton" type="button">恢复所选文字</button>
+                      <button class="secondary-button" id="storyDialogueColorResetButton" type="button">清除全部颜色</button>
                     </div>
-                    <small class="story-dialogue-color-hint">前面的文字保留当前默认灰白渐变，从指定字数开始使用所选颜色。</small>
+                    <div class="story-dialogue-color-range-list" id="storyDialogueColorRangeList"></div>
                   </div>
                 </div>
               </section>
@@ -789,8 +787,8 @@
 
     <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
     <script src="story-picker.js?v=20260825-picker-reset-1" defer></script>
-    <script src="story-renderer.js?v=20260828-dialogue-color-1" defer></script>
-    <script src="app.js?v=20260828-dialogue-color-1" defer></script>
+    <script src="story-renderer.js?v=20260828-dialogue-color-ranges-1" defer></script>
+    <script src="app.js?v=20260828-dialogue-color-ranges-1" defer></script>
   </body>
 </html>
 

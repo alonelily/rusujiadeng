@@ -258,10 +258,12 @@
     storySpeakerInput: document.getElementById("storySpeakerInput"),
     storyDurationInput: document.getElementById("storyDurationInput"),
     storyDialogueInput: document.getElementById("storyDialogueInput"),
-    storyDialogueColorStartInput: document.getElementById("storyDialogueColorStartInput"),
-    storyDialogueColorStartValue: document.getElementById("storyDialogueColorStartValue"),
+    storyDialogueColorSelectionValue: document.getElementById("storyDialogueColorSelectionValue"),
     storyDialogueColorInput: document.getElementById("storyDialogueColorInput"),
+    storyDialogueColorApplyButton: document.getElementById("storyDialogueColorApplyButton"),
+    storyDialogueColorClearSelectionButton: document.getElementById("storyDialogueColorClearSelectionButton"),
     storyDialogueColorResetButton: document.getElementById("storyDialogueColorResetButton"),
+    storyDialogueColorRangeList: document.getElementById("storyDialogueColorRangeList"),
     storyBgmStatus: document.getElementById("storyBgmStatus"),
     storyBgmFileInput: document.getElementById("storyBgmFileInput"),
     storyChooseBgmButton: document.getElementById("storyChooseBgmButton"),
@@ -2825,8 +2827,12 @@
       text,
       typewriter: value.typewriter !== false,
       duration: Math.max(1, Math.min(120, Number(value.duration) || 4)),
-      textColorStart: Math.max(0, Math.min(Array.from(text).length, Math.floor(Number(value.textColorStart) || 0))),
-      textColor: normalizeStoryTextColor(value.textColor),
+      textColorRanges: normalizeStoryTextColorRanges(
+        value.textColorRanges,
+        text,
+        value.textColorStart,
+        value.textColor
+      ),
       actorVariants: normalizeStoryDialogueVariants(value.actorVariants),
       actorColorModes: normalizeStoryDialogueColorModes(value.actorColorModes)
     };
@@ -2835,6 +2841,100 @@
   function normalizeStoryTextColor(value, fallback = "#f3c86b") {
     const color = String(value || "").trim();
     return /^#[0-9a-f]{6}$/i.test(color) ? color.toLowerCase() : fallback;
+  }
+
+  function compactStoryTextColors(colors) {
+    const ranges = [];
+    let start = 0;
+    while (start < colors.length) {
+      const color = normalizeStoryTextColor(colors[start], null);
+      if (!color) {
+        start += 1;
+        continue;
+      }
+      let end = start + 1;
+      while (end < colors.length && normalizeStoryTextColor(colors[end], null) === color) {
+        end += 1;
+      }
+      ranges.push({ start, end, color });
+      start = end;
+    }
+    return ranges;
+  }
+
+  function getStoryTextColorMap(ranges, textLength) {
+    const colors = Array(Math.max(0, textLength)).fill(null);
+    if (!Array.isArray(ranges)) {
+      return colors;
+    }
+    ranges.forEach((range) => {
+      if (!range || typeof range !== "object") {
+        return;
+      }
+      const start = Math.max(0, Math.min(colors.length, Math.floor(Number(range.start) || 0)));
+      const end = Math.max(start, Math.min(colors.length, Math.floor(Number(range.end) || 0)));
+      const color = normalizeStoryTextColor(range.color, null);
+      if (!color || end <= start) {
+        return;
+      }
+      colors.fill(color, start, end);
+    });
+    return colors;
+  }
+
+  function normalizeStoryTextColorRanges(value, text, legacyStart = 0, legacyColor = "#f3c86b") {
+    const textLength = Array.from(String(text || "")).length;
+    if (Array.isArray(value)) {
+      return compactStoryTextColors(getStoryTextColorMap(value, textLength));
+    }
+    const start = Math.max(0, Math.min(textLength, Math.floor(Number(legacyStart) || 0)));
+    const color = normalizeStoryTextColor(legacyColor, null);
+    return start > 0 && start < textLength && color
+      ? [{ start, end: textLength, color }]
+      : [];
+  }
+
+  function updateStoryTextColorRangesForEdit(oldText, newText, ranges) {
+    const oldCharacters = Array.from(String(oldText || ""));
+    const newCharacters = Array.from(String(newText || ""));
+    const oldColors = getStoryTextColorMap(ranges, oldCharacters.length);
+    let prefixLength = 0;
+    while (
+      prefixLength < oldCharacters.length &&
+      prefixLength < newCharacters.length &&
+      oldCharacters[prefixLength] === newCharacters[prefixLength]
+    ) {
+      prefixLength += 1;
+    }
+    let suffixLength = 0;
+    while (
+      suffixLength < oldCharacters.length - prefixLength &&
+      suffixLength < newCharacters.length - prefixLength &&
+      oldCharacters[oldCharacters.length - suffixLength - 1] === newCharacters[newCharacters.length - suffixLength - 1]
+    ) {
+      suffixLength += 1;
+    }
+    const oldChangeEnd = oldCharacters.length - suffixLength;
+    const newChangeEnd = newCharacters.length - suffixLength;
+    let inheritedColor = null;
+    if (oldChangeEnd > prefixLength) {
+      const firstColor = oldColors[prefixLength] || null;
+      if (firstColor && oldColors.slice(prefixLength, oldChangeEnd).every((color) => color === firstColor)) {
+        inheritedColor = firstColor;
+      }
+    } else {
+      const beforeColor = oldColors[prefixLength - 1] || null;
+      const afterColor = oldColors[prefixLength] || null;
+      if (beforeColor && beforeColor === afterColor) {
+        inheritedColor = beforeColor;
+      }
+    }
+    const nextColors = [
+      ...oldColors.slice(0, prefixLength),
+      ...Array(Math.max(0, newChangeEnd - prefixLength)).fill(inheritedColor),
+      ...oldColors.slice(oldChangeEnd)
+    ];
+    return compactStoryTextColors(nextColors.slice(0, newCharacters.length));
   }
 
   function normalizeStoryDialogueColorModes(value) {
@@ -3844,8 +3944,6 @@
       actorId: actor ? actor.assetId : null,
       speaker: actor ? getStoryActorDisplayName(actor, actorIndex) : "",
       duration: current.duration,
-      textColorStart: current.textColorStart,
-      textColor: current.textColor,
       actorVariants: current.actorVariants,
       actorColorModes: current.actorColorModes
     });
@@ -4727,12 +4825,16 @@
       const actor = scene.actors.find((item) => item.assetId === dialogue.actorId);
       dialogue.speaker = actor ? getStoryActorDisplayName(actor, scene.actors.indexOf(actor)) : value;
       dom.storySpeakerInput.value = dialogue.speaker;
-    } else if (field === "speaker" || field === "text") {
-      dialogue[field] = value;
-      if (field === "text") {
-        dialogue.textColorStart = Math.min(dialogue.textColorStart, Array.from(value || "").length);
-        updateStoryDialogueColorControls(dialogue);
-      }
+    } else if (field === "speaker") {
+      dialogue.speaker = value;
+    } else if (field === "text") {
+      dialogue.textColorRanges = updateStoryTextColorRangesForEdit(
+        dialogue.text,
+        value,
+        dialogue.textColorRanges
+      );
+      dialogue.text = value;
+      updateStoryDialogueColorControls(dialogue);
     } else if (field === "duration") {
       dialogue.duration = Math.max(1, Math.min(120, Number(value) || 4));
       syncStorySceneDuration(scene);
@@ -4743,42 +4845,115 @@
     renderStoryCanvas(scene, 1);
   }
 
-  function updateStoryDialogueColorControls(dialogue) {
-    if (!dialogue || !dom.storyDialogueColorStartInput || !dom.storyDialogueColorInput) {
-      return;
-    }
-    const textLength = Array.from(dialogue.text || "").length;
-    dialogue.textColorStart = Math.max(0, Math.min(textLength, Math.floor(Number(dialogue.textColorStart) || 0)));
-    dialogue.textColor = normalizeStoryTextColor(dialogue.textColor);
-    dom.storyDialogueColorStartInput.max = String(textLength);
-    dom.storyDialogueColorStartInput.value = String(dialogue.textColorStart);
-    dom.storyDialogueColorInput.value = dialogue.textColor;
-    if (dom.storyDialogueColorStartValue) {
-      dom.storyDialogueColorStartValue.textContent = dialogue.textColorStart
-        ? `第 ${dialogue.textColorStart + 1} 字起变色`
-        : "关闭变色，整段使用默认颜色";
-    }
-    if (dom.storyDialogueColorResetButton) {
-      dom.storyDialogueColorResetButton.disabled = dialogue.textColorStart === 0 && dialogue.textColor === "#f3c86b";
-    }
+  function getStoryDialogueTextSelection() {
+    const value = dom.storyDialogueInput.value || "";
+    const startOffset = Math.max(0, Number(dom.storyDialogueInput.selectionStart) || 0);
+    const endOffset = Math.max(startOffset, Number(dom.storyDialogueInput.selectionEnd) || startOffset);
+    return {
+      start: Array.from(value.slice(0, startOffset)).length,
+      end: Array.from(value.slice(0, endOffset)).length
+    };
   }
 
-  function updateStoryDialogueColor() {
+  function selectStoryDialogueTextRange(start, end) {
+    const characters = Array.from(dom.storyDialogueInput.value || "");
+    const safeStart = Math.max(0, Math.min(characters.length, start));
+    const safeEnd = Math.max(safeStart, Math.min(characters.length, end));
+    const startOffset = characters.slice(0, safeStart).join("").length;
+    const endOffset = characters.slice(0, safeEnd).join("").length;
+    dom.storyDialogueInput.focus();
+    dom.storyDialogueInput.setSelectionRange(startOffset, endOffset);
+    updateStoryDialogueColorControls(getActiveStoryDialogue(getActiveStoryScene()));
+  }
+
+  function renderStoryDialogueColorRanges(dialogue) {
+    dom.storyDialogueColorRangeList.replaceChildren();
+    const characters = Array.from(dialogue.text || "");
+    dialogue.textColorRanges.forEach((range) => {
+      const item = document.createElement("div");
+      item.className = "story-dialogue-color-range";
+      item.title = `第 ${range.start + 1}–${range.end} 字`;
+      const swatch = document.createElement("span");
+      swatch.className = "story-dialogue-color-swatch";
+      swatch.style.backgroundColor = range.color;
+      const text = document.createElement("span");
+      text.className = "story-dialogue-color-range-text";
+      text.textContent = `「${characters.slice(range.start, range.end).join("") || "空白"}」`;
+      const remove = document.createElement("button");
+      remove.className = "story-dialogue-color-range-remove";
+      remove.type = "button";
+      remove.textContent = "×";
+      remove.setAttribute("aria-label", `恢复${text.textContent}的默认颜色`);
+      remove.addEventListener("click", (event) => {
+        event.stopPropagation();
+        applyStoryDialogueTextColor(range.start, range.end, null);
+      });
+      item.addEventListener("click", () => selectStoryDialogueTextRange(range.start, range.end));
+      item.append(swatch, text, remove);
+      dom.storyDialogueColorRangeList.append(item);
+    });
+  }
+
+  function updateStoryDialogueColorControls(dialogue) {
+    if (!dialogue || !dom.storyDialogueColorInput) {
+      return;
+    }
+    dialogue.textColorRanges = normalizeStoryTextColorRanges(dialogue.textColorRanges, dialogue.text);
+    const selection = getStoryDialogueTextSelection();
+    const characters = Array.from(dialogue.text || "");
+    const hasSelection = selection.end > selection.start;
+    const selectedText = characters.slice(selection.start, selection.end).join("");
+    dom.storyDialogueColorSelectionValue.textContent = hasSelection
+      ? `已选择「${selectedText.length > 18 ? `${Array.from(selectedText).slice(0, 18).join("")}…` : selectedText}」`
+      : "尚未选择文字";
+    dom.storyDialogueColorApplyButton.disabled = !hasSelection;
+    dom.storyDialogueColorClearSelectionButton.disabled = !hasSelection;
+    dom.storyDialogueColorResetButton.disabled = dialogue.textColorRanges.length === 0;
+    renderStoryDialogueColorRanges(dialogue);
+  }
+
+  function applyStoryDialogueTextColor(start, end, color) {
     const scene = getActiveStoryScene();
     const dialogue = scene && getActiveStoryDialogue(scene);
     if (!dialogue) {
       return;
     }
-    dialogue.textColorStart = Math.max(0, Math.min(
-      Array.from(dialogue.text || "").length,
-      Math.floor(Number(dom.storyDialogueColorStartInput.value) || 0)
-    ));
-    dialogue.textColor = normalizeStoryTextColor(dom.storyDialogueColorInput.value);
+    const textLength = Array.from(dialogue.text || "").length;
+    const safeStart = Math.max(0, Math.min(textLength, Math.floor(Number(start) || 0)));
+    const safeEnd = Math.max(safeStart, Math.min(textLength, Math.floor(Number(end) || 0)));
+    if (safeEnd <= safeStart) {
+      return;
+    }
+    const colors = getStoryTextColorMap(dialogue.textColorRanges, textLength);
+    colors.fill(normalizeStoryTextColor(color, null), safeStart, safeEnd);
+    dialogue.textColorRanges = compactStoryTextColors(colors);
     updateStoryDialogueColorControls(dialogue);
     saveStoryProject();
     renderStoryDialogueList(scene);
     renderStorySceneList();
     renderStoryCanvas(scene, 1);
+  }
+
+  function applySelectedStoryDialogueColor() {
+    const selection = getStoryDialogueTextSelection();
+    if (selection.end <= selection.start) {
+      showToast("请先在对话内容中选择文字");
+      return;
+    }
+    applyStoryDialogueTextColor(
+      selection.start,
+      selection.end,
+      normalizeStoryTextColor(dom.storyDialogueColorInput.value)
+    );
+  }
+
+  function clearSelectedStoryDialogueColor() {
+    const selection = getStoryDialogueTextSelection();
+    if (selection.end <= selection.start) {
+      showToast("请先在对话内容中选择文字");
+      return;
+    }
+    applyStoryDialogueTextColor(selection.start, selection.end, null);
   }
 
   function resetStoryDialogueColor() {
@@ -4787,8 +4962,7 @@
     if (!dialogue) {
       return;
     }
-    dialogue.textColorStart = 0;
-    dialogue.textColor = "#f3c86b";
+    dialogue.textColorRanges = [];
     updateStoryDialogueColorControls(dialogue);
     saveStoryProject();
     renderStoryDialogueList(scene);
@@ -7218,9 +7392,18 @@
     });
     dom.storySpeakerInput.addEventListener("input", () => updateStorySceneField("speaker", dom.storySpeakerInput.value));
     dom.storyDialogueInput.addEventListener("input", () => updateStorySceneField("text", dom.storyDialogueInput.value));
+    ["select", "keyup", "pointerup"].forEach((eventName) => {
+      dom.storyDialogueInput.addEventListener(eventName, () => {
+        const scene = getActiveStoryScene();
+        const dialogue = scene && getActiveStoryDialogue(scene);
+        if (dialogue) {
+          updateStoryDialogueColorControls(dialogue);
+        }
+      });
+    });
     dom.storyDurationInput.addEventListener("input", () => updateStorySceneField("duration", dom.storyDurationInput.value));
-    dom.storyDialogueColorStartInput.addEventListener("input", updateStoryDialogueColor);
-    dom.storyDialogueColorInput.addEventListener("input", updateStoryDialogueColor);
+    dom.storyDialogueColorApplyButton.addEventListener("click", applySelectedStoryDialogueColor);
+    dom.storyDialogueColorClearSelectionButton.addEventListener("click", clearSelectedStoryDialogueColor);
     dom.storyDialogueColorResetButton.addEventListener("click", resetStoryDialogueColor);
     dom.storyChooseBackgroundButton.addEventListener("click", () => chooseStoryResource("background"));
     dom.storyChooseActorButton.addEventListener("click", () => chooseStoryResource("actor"));
