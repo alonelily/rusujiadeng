@@ -3293,19 +3293,27 @@
       if (!variant) {
         return { ...actor, colorMode };
       }
+      // A persisted/generated variant can temporarily have no URL while its
+      // cached blob is being restored. Keep the base actor visible meanwhile.
+      const variantUrl = typeof variant.url === "string" && variant.url.trim()
+        ? variant.url
+        : actor.url;
+      const variantThumbnailUrl = typeof variant.thumbnailUrl === "string" && variant.thumbnailUrl.trim()
+        ? variant.thumbnailUrl
+        : actor.thumbnailUrl;
       return {
         ...actor,
         colorMode,
-        url: variant.url,
-        thumbnailUrl: variant.thumbnailUrl || actor.thumbnailUrl,
+        url: variantUrl,
+        thumbnailUrl: variantThumbnailUrl,
         sourceUrl: variant.sourceUrl || actor.sourceUrl,
-        sourceIndex: variant.sourceIndex,
-        expressionIndex: variant.expressionIndex,
-        cacheKey: variant.cacheKey,
-        thumbnailCacheKey: variant.thumbnailCacheKey,
+        sourceIndex: variant.sourceIndex ?? actor.sourceIndex,
+        expressionIndex: variant.expressionIndex ?? actor.expressionIndex,
+        cacheKey: variant.cacheKey || actor.cacheKey,
+        thumbnailCacheKey: variant.thumbnailCacheKey || actor.thumbnailCacheKey,
         label: variant.label || actor.label,
         filename: variant.filename || actor.filename,
-        generated: Boolean(variant.generated)
+        generated: Boolean(variant.generated || actor.generated)
       };
     });
   }
