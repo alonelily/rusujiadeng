@@ -204,7 +204,7 @@
         range.ruby,
         Math.max(10, layout.dialogueFontSize * 0.48),
         Math.max(8, layout.dialogueFontSize * 0.28),
-        Math.max(1, spanEndX - spanStartX),
+        Math.max(spanEndX - spanStartX, layout.textWidth),
         500,
         fontFamily
       );
@@ -218,10 +218,10 @@
       setDialogueGradient(
         context,
         centerX,
-        y - layout.dialogueFontSize * 1.12,
-        y - layout.dialogueFontSize * 0.58
+        y - layout.dialogueFontSize * 1.52,
+        y - layout.dialogueFontSize * 1.04
       );
-      drawOutlinedText(context, range.ruby, centerX, y - Math.max(7, layout.dialogueFontSize * 0.52));
+      drawOutlinedText(context, range.ruby, centerX, y - Math.max(12, layout.dialogueFontSize * 1.08));
     });
     context.restore();
     context.font = baseFont;
