@@ -1076,7 +1076,7 @@
       const blob = await response.blob();
       const filename = sanitizeFilename(item.fileName || getFilename(item.audioAsset) || `BGM_${item.id}`);
       await saveBlob(blob, /\.[a-z0-9]{2,5}$/i.test(filename) ? filename : `${filename}.mp3`, "保存或分享 BGM");
-      showToast(isNativeApp() ? "BGM 已打开系统保存面板" : "BGM 已开始下载");
+      showToast(isNativeDirectFileSaverAvailable() ? "BGM 已保存到下载/如数迦贞" : isNativeApp() ? "BGM 已打开系统保存面板" : "BGM 已开始下载");
     } catch (_error) {
       window.open(item.audioAsset, "_blank", "noopener,noreferrer");
       showToast("无法直接读取音频，已打开原始音频链接");
@@ -2491,7 +2491,7 @@
         blob = await response.blob();
       }
       await saveBlob(blob, asset.filename || getFilename(asset.url), "保存或分享图片");
-      showToast(isNativeApp() ? "已打开系统保存面板" : "图片已开始下载");
+      showToast(isNativeDirectFileSaverAvailable() ? "图片已保存到下载/如数迦贞" : isNativeApp() ? "已打开系统保存面板" : "图片已开始下载");
     } catch (_error) {
       if (!asset.blob) {
         window.open(asset.url, "_blank", "noopener,noreferrer");
@@ -2522,7 +2522,7 @@
       const servantName = sanitizeFilename(state.modalItem.name || `servant_${state.modalItem.id}`);
       const filename = `${servantName}_${state.region}_${labels.full}_${group.assets.length}张.zip`;
       await saveBlob(zipBlob, filename, `保存或分享${labels.full}包`);
-      showToast(isNativeApp() ? `${labels.full}包已交给系统保存` : `${labels.full}包已开始下载`);
+      showToast(isNativeDirectFileSaverAvailable() ? `${labels.full}包已保存到下载/如数迦贞` : isNativeApp() ? `${labels.full}包已交给系统保存` : `${labels.full}包已开始下载`);
     } catch (_error) {
       showToast(`${labels.full}包生成失败，请稍后重试`);
     } finally {
@@ -2636,9 +2636,43 @@
       && window.Capacitor.isNativePlatform());
   }
 
+  function isNativeDirectFileSaverAvailable() {
+    if (!isNativeApp() || typeof window.Capacitor.nativePromise !== "function") {
+      return false;
+    }
+    // DirectFileSaver is registered by MainActivity rather than a JS plugin
+    // package, so it may not appear in Capacitor's generated plugin headers.
+    if (typeof window.Capacitor.isPluginAvailable === "function"
+      && window.Capacitor.isPluginAvailable("DirectFileSaver")) {
+      return true;
+    }
+    return typeof window.Capacitor.getPlatform === "function"
+      && window.Capacitor.getPlatform() === "android";
+  }
+
   const NATIVE_SAVE_CHUNK_SIZE = 2 * 1024 * 1024;
 
   async function saveBlob(blob, filename, dialogTitle) {
+    if (isNativeDirectFileSaverAvailable()) {
+      if (!(blob instanceof Blob) || !blob.size) {
+        throw new Error("无法保存空文件");
+      }
+      let uri = null;
+      for (let offset = 0; offset < blob.size; offset += NATIVE_SAVE_CHUNK_SIZE) {
+        const chunk = blob.slice(offset, Math.min(blob.size, offset + NATIVE_SAVE_CHUNK_SIZE));
+        const result = await window.Capacitor.nativePromise("DirectFileSaver", "saveToDownloads", {
+          filename,
+          mimeType: blob.type || "application/octet-stream",
+          data: await blobToBase64(chunk),
+          uri,
+          append: Boolean(uri),
+          complete: offset + chunk.size >= blob.size
+        });
+        uri = result && result.uri ? result.uri : uri;
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }
+      return { uri };
+    }
     if (isNativeApp() && typeof window.Capacitor.nativePromise === "function") {
       if (!(blob instanceof Blob) || !blob.size) {
         throw new Error("无法保存空文件");
@@ -7002,7 +7036,7 @@
         const filename = `${sanitizeFilename(project.title || "未命名剧情")}.${result.info.extension}`;
         await saveBlob(result.blob, filename, "保存剧情视频");
         updateStoryExportProgress(1, "视频已导出");
-        showToast("剧情视频已导出");
+        showToast(isNativeDirectFileSaverAvailable() ? "剧情视频已导出到下载/如数迦贞" : "剧情视频已导出");
         return;
       }
       exportStage = setStoryExportStage("encoding");
@@ -7056,7 +7090,7 @@
       exportStage = setStoryExportStage("saving");
       await saveBlob(blob, filename, "保存剧情视频");
       updateStoryExportProgress(1, "视频已导出");
-      showToast("剧情视频已导出");
+      showToast(isNativeDirectFileSaverAvailable() ? "剧情视频已导出到下载/如数迦贞" : "剧情视频已导出");
     } catch (error) {
       dom.storyExportStatus.dataset.errorName = String(error && error.name || "Error");
       const message = getStoryExportErrorMessage(error, exportStage);
@@ -7120,7 +7154,7 @@
     const blob = new Blob([JSON.stringify(project, null, 2)], { type: "application/json" });
     const filename = `${sanitizeFilename(project.title || "未命名剧情")}.story.json`;
     await saveBlob(blob, filename, "保存剧情项目");
-    showToast("剧情 JSON 已导出");
+    showToast(isNativeDirectFileSaverAvailable() ? "剧情项目已保存到下载/如数迦贞" : "剧情 JSON 已导出");
   }
 
   function createBlankStoryProject(title = "未命名剧情") {
@@ -7397,7 +7431,8 @@
     const blob = await createStoredZip(entries, () => {});
     await saveBlob(blob, `${sanitizeFilename(project.title || "未命名剧情")}.rusu`, "备份剧情工程");
     updateStoryProjectSaveStatus("已自动保存到本机", "saved");
-    showToast(`剧情备份已生成${assetManifest.length ? `，包含 ${assetManifest.length} 个本地素材` : ""}`);
+    const backupMessage = `剧情备份已生成${assetManifest.length ? `，包含 ${assetManifest.length} 个本地素材` : ""}`;
+    showToast(isNativeDirectFileSaverAvailable() ? `${backupMessage}，已保存到下载/如数迦贞` : backupMessage);
   }
 
   function base64ToBlob(data, type) {
