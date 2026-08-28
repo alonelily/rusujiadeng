@@ -258,6 +258,10 @@
     storySpeakerInput: document.getElementById("storySpeakerInput"),
     storyDurationInput: document.getElementById("storyDurationInput"),
     storyDialogueInput: document.getElementById("storyDialogueInput"),
+    storyDialogueColorStartInput: document.getElementById("storyDialogueColorStartInput"),
+    storyDialogueColorStartValue: document.getElementById("storyDialogueColorStartValue"),
+    storyDialogueColorInput: document.getElementById("storyDialogueColorInput"),
+    storyDialogueColorResetButton: document.getElementById("storyDialogueColorResetButton"),
     storyBgmStatus: document.getElementById("storyBgmStatus"),
     storyBgmFileInput: document.getElementById("storyBgmFileInput"),
     storyChooseBgmButton: document.getElementById("storyChooseBgmButton"),
@@ -2813,16 +2817,24 @@
   }
 
   function createStoryDialogue(value = {}) {
+    const text = String(value.text || "").slice(0, 500);
     return {
       id: value.id || `dialogue-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       actorId: value.actorId || null,
       speaker: String(value.speaker || "").slice(0, 40),
-      text: String(value.text || "").slice(0, 500),
+      text,
       typewriter: value.typewriter !== false,
       duration: Math.max(1, Math.min(120, Number(value.duration) || 4)),
+      textColorStart: Math.max(0, Math.min(Array.from(text).length, Math.floor(Number(value.textColorStart) || 0))),
+      textColor: normalizeStoryTextColor(value.textColor),
       actorVariants: normalizeStoryDialogueVariants(value.actorVariants),
       actorColorModes: normalizeStoryDialogueColorModes(value.actorColorModes)
     };
+  }
+
+  function normalizeStoryTextColor(value, fallback = "#f3c86b") {
+    const color = String(value || "").trim();
+    return /^#[0-9a-f]{6}$/i.test(color) ? color.toLowerCase() : fallback;
   }
 
   function normalizeStoryDialogueColorModes(value) {
@@ -3620,6 +3632,7 @@
       ? "人物名称请在人物通用选项中修改"
       : "旁白名称可选，留空时不显示姓名栏";
     dom.storyDialogueInput.value = dialogue.text || "";
+    updateStoryDialogueColorControls(dialogue);
     dom.storyDurationInput.value = String(dialogue.duration);
     dom.storyDeleteSceneButton.disabled = state.story.project.scenes.length <= 1;
     dom.storyActorToolCount.textContent = String(scene.actors.length);
@@ -3831,6 +3844,8 @@
       actorId: actor ? actor.assetId : null,
       speaker: actor ? getStoryActorDisplayName(actor, actorIndex) : "",
       duration: current.duration,
+      textColorStart: current.textColorStart,
+      textColor: current.textColor,
       actorVariants: current.actorVariants,
       actorColorModes: current.actorColorModes
     });
@@ -4714,10 +4729,67 @@
       dom.storySpeakerInput.value = dialogue.speaker;
     } else if (field === "speaker" || field === "text") {
       dialogue[field] = value;
+      if (field === "text") {
+        dialogue.textColorStart = Math.min(dialogue.textColorStart, Array.from(value || "").length);
+        updateStoryDialogueColorControls(dialogue);
+      }
     } else if (field === "duration") {
       dialogue.duration = Math.max(1, Math.min(120, Number(value) || 4));
       syncStorySceneDuration(scene);
     }
+    saveStoryProject();
+    renderStoryDialogueList(scene);
+    renderStorySceneList();
+    renderStoryCanvas(scene, 1);
+  }
+
+  function updateStoryDialogueColorControls(dialogue) {
+    if (!dialogue || !dom.storyDialogueColorStartInput || !dom.storyDialogueColorInput) {
+      return;
+    }
+    const textLength = Array.from(dialogue.text || "").length;
+    dialogue.textColorStart = Math.max(0, Math.min(textLength, Math.floor(Number(dialogue.textColorStart) || 0)));
+    dialogue.textColor = normalizeStoryTextColor(dialogue.textColor);
+    dom.storyDialogueColorStartInput.max = String(textLength);
+    dom.storyDialogueColorStartInput.value = String(dialogue.textColorStart);
+    dom.storyDialogueColorInput.value = dialogue.textColor;
+    if (dom.storyDialogueColorStartValue) {
+      dom.storyDialogueColorStartValue.textContent = dialogue.textColorStart
+        ? `第 ${dialogue.textColorStart + 1} 字起变色`
+        : "关闭变色，整段使用默认颜色";
+    }
+    if (dom.storyDialogueColorResetButton) {
+      dom.storyDialogueColorResetButton.disabled = dialogue.textColorStart === 0 && dialogue.textColor === "#f3c86b";
+    }
+  }
+
+  function updateStoryDialogueColor() {
+    const scene = getActiveStoryScene();
+    const dialogue = scene && getActiveStoryDialogue(scene);
+    if (!dialogue) {
+      return;
+    }
+    dialogue.textColorStart = Math.max(0, Math.min(
+      Array.from(dialogue.text || "").length,
+      Math.floor(Number(dom.storyDialogueColorStartInput.value) || 0)
+    ));
+    dialogue.textColor = normalizeStoryTextColor(dom.storyDialogueColorInput.value);
+    updateStoryDialogueColorControls(dialogue);
+    saveStoryProject();
+    renderStoryDialogueList(scene);
+    renderStorySceneList();
+    renderStoryCanvas(scene, 1);
+  }
+
+  function resetStoryDialogueColor() {
+    const scene = getActiveStoryScene();
+    const dialogue = scene && getActiveStoryDialogue(scene);
+    if (!dialogue) {
+      return;
+    }
+    dialogue.textColorStart = 0;
+    dialogue.textColor = "#f3c86b";
+    updateStoryDialogueColorControls(dialogue);
     saveStoryProject();
     renderStoryDialogueList(scene);
     renderStorySceneList();
@@ -5819,8 +5891,11 @@
         scene.dialogue = dialogue;
         dom.storySpeakerInput.value = dialogue.speaker || "";
         dom.storySpeakerInput.readOnly = Boolean(dialogue.actorId);
-        dom.storySpeakerInput.title = dialogue.actorId ? "人物名称请在人物通用选项中修改" : "输入旁白显示名称";
+        dom.storySpeakerInput.title = dialogue.actorId
+          ? "人物名称请在人物通用选项中修改"
+          : "旁白名称可选，留空时不显示姓名栏";
         dom.storyDialogueInput.value = dialogue.text || "";
+        updateStoryDialogueColorControls(dialogue);
         dom.storyDurationInput.value = String(dialogue.duration);
         renderStoryDialogueList(scene);
         renderStoryActorList(scene);
@@ -7144,6 +7219,9 @@
     dom.storySpeakerInput.addEventListener("input", () => updateStorySceneField("speaker", dom.storySpeakerInput.value));
     dom.storyDialogueInput.addEventListener("input", () => updateStorySceneField("text", dom.storyDialogueInput.value));
     dom.storyDurationInput.addEventListener("input", () => updateStorySceneField("duration", dom.storyDurationInput.value));
+    dom.storyDialogueColorStartInput.addEventListener("input", updateStoryDialogueColor);
+    dom.storyDialogueColorInput.addEventListener("input", updateStoryDialogueColor);
+    dom.storyDialogueColorResetButton.addEventListener("click", resetStoryDialogueColor);
     dom.storyChooseBackgroundButton.addEventListener("click", () => chooseStoryResource("background"));
     dom.storyChooseActorButton.addEventListener("click", () => chooseStoryResource("actor"));
     dom.storyToolTabs.querySelectorAll("[data-story-tool]").forEach((button) => {

@@ -26,17 +26,19 @@
     context.drawImage(image, (width - drawWidth) / 2, (height - drawHeight) / 2, drawWidth, drawHeight);
   }
 
-  function getWrappedLines(context, text, maxWidth, maxLines) {
+  function getWrappedLineObjects(context, text, maxWidth, maxLines) {
     const characters = Array.from(String(text || ""));
     const lines = [];
     let line = "";
+    let lineStart = 0;
     let consumed = 0;
 
     for (let index = 0; index < characters.length; index += 1) {
       const character = characters[index];
       if (character === "\n") {
-        lines.push(line);
+        lines.push({ text: line, start: lineStart, end: index });
         line = "";
+        lineStart = index + 1;
         consumed = index + 1;
         if (lines.length >= maxLines) {
           break;
@@ -45,8 +47,9 @@
       }
       const candidate = line + character;
       if (context.measureText(candidate).width > maxWidth && line) {
-        lines.push(line);
+        lines.push({ text: line, start: lineStart, end: index });
         line = character;
+        lineStart = index;
         if (lines.length >= maxLines) {
           consumed = index;
           break;
@@ -58,17 +61,22 @@
     }
 
     if (lines.length < maxLines && line) {
-      lines.push(line);
+      lines.push({ text: line, start: lineStart, end: characters.length });
     }
     const hasOverflow = consumed < characters.length;
     if (hasOverflow && lines.length) {
-      let lastLine = lines[Math.min(lines.length, maxLines) - 1];
-      while (lastLine && context.measureText(`${lastLine}…`).width > maxWidth) {
-        lastLine = lastLine.slice(0, -1);
+      const lastLine = lines[Math.min(lines.length, maxLines) - 1];
+      while (lastLine.text && context.measureText(`${lastLine.text}…`).width > maxWidth) {
+        lastLine.text = lastLine.text.slice(0, -1);
+        lastLine.end = Math.max(lastLine.start, lastLine.end - 1);
       }
-      lines[Math.min(lines.length, maxLines) - 1] = `${lastLine}…`;
+      lastLine.text = `${lastLine.text}…`;
     }
     return lines.slice(0, maxLines);
+  }
+
+  function getWrappedLines(context, text, maxWidth, maxLines) {
+    return getWrappedLineObjects(context, text, maxWidth, maxLines).map((line) => line.text);
   }
 
   function drawOutlinedText(context, text, x, y) {
@@ -82,6 +90,44 @@
     gradient.addColorStop(0.52, "#e0e1df");
     gradient.addColorStop(1, "#aeb3b7");
     context.fillStyle = gradient;
+  }
+
+  function drawDialogueLine(context, line, x, y, layout, colorStart, color) {
+    const characters = Array.from(line.text);
+    let offset = 0;
+    let segmentStart = 0;
+    let segmentUsesColor = colorStart > 0 && line.start >= colorStart;
+    const drawSegment = (end) => {
+      if (end <= segmentStart) {
+        return;
+      }
+      const segment = characters.slice(segmentStart, end).join("");
+      if (!segment) {
+        return;
+      }
+      if (segmentUsesColor) {
+        context.fillStyle = color;
+      } else {
+        setDialogueGradient(
+          context,
+          x + offset,
+          y - layout.dialogueFontSize,
+          y + Math.max(3, layout.dialogueFontSize * 0.12)
+        );
+      }
+      drawOutlinedText(context, segment, x + offset, y);
+      offset += context.measureText(segment).width;
+    };
+
+    for (let index = 0; index < characters.length; index += 1) {
+      const usesColor = colorStart > 0 && line.start + index >= colorStart;
+      if (usesColor !== segmentUsesColor) {
+        drawSegment(index);
+        segmentStart = index;
+        segmentUsesColor = usesColor;
+      }
+    }
+    drawSegment(characters.length);
   }
 
   function fitFontSize(context, text, preferredSize, minimumSize, maxWidth, weight, fontFamily) {
@@ -394,15 +440,13 @@
       context.shadowOffsetY = Math.max(0.35, 0.65 * layout.scale);
       context.font = `500 ${Math.round(layout.dialogueFontSize)}px ${activeFontFamily}`;
       const maxDialogueLines = aspect === "9:16" ? 3 : 2;
-      getWrappedLines(context, visibleText, layout.textWidth, maxDialogueLines).forEach((line, index) => {
+      const textColorStart = Math.max(0, Math.floor(Number(scene.dialogue.textColorStart) || 0));
+      const textColor = /^#[0-9a-f]{6}$/i.test(String(scene.dialogue.textColor || ""))
+        ? String(scene.dialogue.textColor)
+        : "#f3c86b";
+      getWrappedLineObjects(context, visibleText, layout.textWidth, maxDialogueLines).forEach((line, index) => {
         const lineY = layout.textY + index * layout.lineHeight;
-        setDialogueGradient(
-          context,
-          layout.textX,
-          lineY - layout.dialogueFontSize,
-          lineY + Math.max(3, layout.dialogueFontSize * 0.12)
-        );
-        drawOutlinedText(context, line, layout.textX, lineY);
+        drawDialogueLine(context, line, layout.textX, lineY, layout, textColorStart, textColor);
       });
       context.shadowColor = "transparent";
       context.shadowBlur = 0;
