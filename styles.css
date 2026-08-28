@@ -5028,7 +5028,7 @@ footer a:hover {
   color: #fff;
 }
 
-/* Three-window launcher */
+/* Main launcher */
 .source-intro {
   display: block;
   padding: 34px clamp(18px, 4vw, 64px) 44px;
@@ -5210,7 +5210,7 @@ footer a:hover {
 
 .intro-window-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: clamp(10px, 1.7vw, 24px);
   width: 100%;
   margin-top: clamp(18px, 3vw, 34px);
@@ -5281,6 +5281,11 @@ footer a:hover {
   background-position: center 42%;
 }
 
+.intro-window-support .intro-window-image {
+  background-image: url("assets/landing/support-window.jpg");
+  background-position: center;
+}
+
 .intro-window-caption {
   position: absolute;
   right: 0;
@@ -5316,12 +5321,86 @@ footer a:hover {
   display: none;
 }
 
+.app-shell.is-support-open main > :not(.support-panel) {
+  display: none;
+}
+
+.support-panel {
+  display: grid;
+  min-height: calc(100vh - var(--header-height));
+  grid-template-columns: minmax(280px, 0.9fr) minmax(0, 1.1fr);
+  background: #111;
+  color: #fff;
+}
+
+.support-panel-art {
+  display: grid;
+  min-height: 580px;
+  place-items: center;
+  overflow: hidden;
+  background: #05c568;
+}
+
+.support-panel-art img {
+  display: block;
+  width: min(100%, 620px);
+  height: 100%;
+  object-fit: contain;
+}
+
+.support-panel-content {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 14px;
+  padding: clamp(28px, 6vw, 92px);
+}
+
+.support-panel-content h1 {
+  margin: 0;
+  font-family: Georgia, "Times New Roman", "Songti SC", serif;
+  font-size: clamp(32px, 4vw, 62px);
+}
+
+.support-panel-content p {
+  max-width: 560px;
+  margin: 0 0 2px;
+  color: rgb(255 255 255 / 72%);
+  line-height: 1.8;
+}
+
+.support-panel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.support-panel-actions a {
+  text-decoration: none;
+}
+
+.support-panel-contact {
+  color: rgb(255 255 255 / 52%) !important;
+  font-size: 13px;
+}
+
+.support-panel-contact a {
+  color: #f0c969;
+  text-underline-offset: 3px;
+}
+
 .more-panel {
   display: grid;
   min-height: calc(100vh - var(--header-height));
   grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
   background: #111;
   color: #fff;
+}
+
+.more-panel[hidden],
+.support-panel[hidden] {
+  display: none;
 }
 
 .more-panel-art {
@@ -5448,11 +5527,24 @@ footer a:hover {
     grid-template-columns: 1fr;
   }
 
+  .support-panel {
+    grid-template-columns: 1fr;
+  }
+
   .more-panel-art {
     min-height: 42vh;
   }
 
+  .support-panel-art {
+    min-height: 58vh;
+  }
+
   .more-panel-content {
+    min-height: 42vh;
+    padding: 30px 22px 44px;
+  }
+
+  .support-panel-content {
     min-height: 42vh;
     padding: 30px 22px 44px;
   }
