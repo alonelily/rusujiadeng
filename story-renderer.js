@@ -3,10 +3,20 @@
 
   const STORY_DIALOGUE_BOX_URL = "assets/story/dialogue-box.png";
   const STORY_NAME_BOX_URL = "assets/story/name-box.png";
+  const STORY_DIALOGUE_UI_CONTROLS_URL = "assets/story/dialogue-ui-controls.png";
   const STORY_FALLBACK_FONT_FAMILY = '"Microsoft YaHei", sans-serif';
   const STORY_FONT_FAMILY = '"FgoFzZhengzhong", "Microsoft YaHei", sans-serif';
   const STORY_FONT_OPTIONS = {
     system: { label: "系统默认", family: STORY_FALLBACK_FONT_FAMILY, url: null },
+    "fgo-story": { label: "FGO Story", family: "FGOStory", url: "assets/fonts/fgo-story.otf" },
+    "font-2": { label: "字体 2 · OTF", family: "FgoFont2", url: "assets/fonts/2.otf" },
+    "font-3": { label: "字体 3 · OTF", family: "FgoFont3", url: "assets/fonts/3.otf" },
+    "font-4": { label: "字体 4 · OTF", family: "FgoFont4", url: "assets/fonts/4.otf" },
+    "font-5": { label: "字体 5 · OTF", family: "FgoFont5", url: "assets/fonts/5.otf" },
+    "font-fzlthjw": { label: "FZLTHJW · TTF", family: "FgoFzlthjw", url: "assets/fonts/FZLTHJW.TTF" },
+    "font-reeji": { label: "瑞锦云峰宋 · TTF", family: "FgoReeji", url: "assets/fonts/Reeji-CloudSongDa-GB%20Regular.ttf" },
+    "font-simsun": { label: "宋体 · TTC", family: "FgoSimSun", url: "assets/fonts/simsun.ttc" },
+    "font-fzxiaobiao": { label: "方正小标宋 · TTF", family: "FgoFzXiaobiao", url: "assets/fonts/%E6%96%B9%E6%AD%A3%E5%B0%8F%E6%A0%87%E5%AE%8B_GBK.ttf" },
     "font-fzzhengzhong": { label: "方正正中黑 · TTF", family: "FgoFzZhengzhong", url: "assets/fonts/fz-zhengzhong.ttf" }
   };
   const STORY_BASE_WIDTH = 1024;
@@ -17,7 +27,11 @@
   const STORY_NAME_HEIGHT = 48;
   const STORY_NAME_TEXT_OPACITY = 1;
   const STORY_DIALOGUE_TEXT_OPACITY = 1;
+  const STORY_DIALOGUE_UI_CONTROLS_WIDTH = 1140;
+  const STORY_DIALOGUE_UI_CONTROLS_HEIGHT = 178;
   const STORY_TYPEWRITER_CHARACTERS_PER_SECOND = 20;
+  const STORY_DIALOGUE_FONT_SCALE_MIN = 0.8;
+  const STORY_DIALOGUE_FONT_SCALE_MAX = 1.4;
 
   function drawCover(context, image, width, height) {
     const scale = Math.max(width / image.naturalWidth, height / image.naturalHeight);
@@ -26,19 +40,17 @@
     context.drawImage(image, (width - drawWidth) / 2, (height - drawHeight) / 2, drawWidth, drawHeight);
   }
 
-  function getWrappedLineObjects(context, text, maxWidth, maxLines) {
+  function getWrappedLines(context, text, maxWidth, maxLines) {
     const characters = Array.from(String(text || ""));
     const lines = [];
     let line = "";
-    let lineStart = 0;
     let consumed = 0;
 
     for (let index = 0; index < characters.length; index += 1) {
       const character = characters[index];
       if (character === "\n") {
-        lines.push({ text: line, start: lineStart, end: index });
+        lines.push(line);
         line = "";
-        lineStart = index + 1;
         consumed = index + 1;
         if (lines.length >= maxLines) {
           break;
@@ -47,9 +59,8 @@
       }
       const candidate = line + character;
       if (context.measureText(candidate).width > maxWidth && line) {
-        lines.push({ text: line, start: lineStart, end: index });
+        lines.push(line);
         line = character;
-        lineStart = index;
         if (lines.length >= maxLines) {
           consumed = index;
           break;
@@ -61,22 +72,78 @@
     }
 
     if (lines.length < maxLines && line) {
-      lines.push({ text: line, start: lineStart, end: characters.length });
+      lines.push(line);
     }
     const hasOverflow = consumed < characters.length;
     if (hasOverflow && lines.length) {
-      const lastLine = lines[Math.min(lines.length, maxLines) - 1];
-      while (lastLine.text && context.measureText(`${lastLine.text}…`).width > maxWidth) {
-        lastLine.text = lastLine.text.slice(0, -1);
-        lastLine.end = Math.max(lastLine.start, lastLine.end - 1);
+      let lastLine = lines[Math.min(lines.length, maxLines) - 1];
+      while (lastLine && context.measureText(`${lastLine}…`).width > maxWidth) {
+        lastLine = lastLine.slice(0, -1);
       }
-      lastLine.text = `${lastLine.text}…`;
+      lines[Math.min(lines.length, maxLines) - 1] = `${lastLine}…`;
     }
     return lines.slice(0, maxLines);
   }
 
-  function getWrappedLines(context, text, maxWidth, maxLines) {
-    return getWrappedLineObjects(context, text, maxWidth, maxLines).map((line) => line.text);
+  function getWrappedStyledLines(context, text, maxWidth, maxLines, getFont) {
+    const characters = Array.from(String(text || ""));
+    const lines = [];
+    let items = [];
+    let lineWidth = 0;
+    let consumed = 0;
+    const pushLine = () => {
+      if (!items.length) {
+        return;
+      }
+      lines.push({ items, width: lineWidth });
+      items = [];
+      lineWidth = 0;
+    };
+
+    for (let index = 0; index < characters.length; index += 1) {
+      const character = characters[index];
+      if (character === "\n") {
+        pushLine();
+        consumed = index + 1;
+        if (lines.length >= maxLines) {
+          break;
+        }
+        continue;
+      }
+      context.font = getFont(index);
+      const characterWidth = context.measureText(character).width;
+      if (items.length && lineWidth + characterWidth > maxWidth) {
+        pushLine();
+        if (lines.length >= maxLines) {
+          consumed = index;
+          break;
+        }
+      }
+      items.push({ character, index, width: characterWidth });
+      lineWidth += characterWidth;
+      consumed = index + 1;
+    }
+    if (lines.length < maxLines) {
+      pushLine();
+    }
+
+    if (consumed < characters.length && lines.length) {
+      const lastLine = lines[Math.min(lines.length, maxLines) - 1];
+      const ellipsisFont = getFont(lastLine.items[lastLine.items.length - 1]?.index ?? 0);
+      context.font = ellipsisFont;
+      let ellipsisWidth = context.measureText("…").width;
+      while (lastLine.items.length && lastLine.width + ellipsisWidth > maxWidth) {
+        const removed = lastLine.items.pop();
+        lastLine.width -= removed.width;
+      }
+      if (lastLine.width + ellipsisWidth > maxWidth) {
+        context.font = getFont(0);
+        ellipsisWidth = context.measureText("…").width;
+      }
+      lastLine.items.push({ character: "…", index: null, width: ellipsisWidth });
+      lastLine.width += ellipsisWidth;
+    }
+    return lines.slice(0, maxLines);
   }
 
   function drawOutlinedText(context, text, x, y) {
@@ -90,141 +157,6 @@
     gradient.addColorStop(0.52, "#e0e1df");
     gradient.addColorStop(1, "#aeb3b7");
     context.fillStyle = gradient;
-  }
-
-  function getDialogueTextColors(dialogue) {
-    const textLength = Array.from(String(dialogue.text || "")).length;
-    const colors = Array(textLength).fill(null);
-    const ranges = Array.isArray(dialogue.textColorRanges)
-      ? dialogue.textColorRanges
-      : (() => {
-          const legacyStart = Math.max(0, Math.min(textLength, Math.floor(Number(dialogue.textColorStart) || 0)));
-          const legacyColor = /^#[0-9a-f]{6}$/i.test(String(dialogue.textColor || ""))
-            ? String(dialogue.textColor).toLowerCase()
-            : "#f3c86b";
-          return legacyStart > 0 && legacyStart < textLength
-            ? [{ start: legacyStart, end: textLength, color: legacyColor }]
-            : [];
-        })();
-    ranges.forEach((range) => {
-      if (!range || typeof range !== "object" || !/^#[0-9a-f]{6}$/i.test(String(range.color || ""))) {
-        return;
-      }
-      const start = Math.max(0, Math.min(textLength, Math.floor(Number(range.start) || 0)));
-      const end = Math.max(start, Math.min(textLength, Math.floor(Number(range.end) || 0)));
-      colors.fill(String(range.color).toLowerCase(), start, end);
-    });
-    return colors;
-  }
-
-  function getDialogueTextRubyRanges(dialogue, visibleLength) {
-    const textLength = Array.from(String(dialogue.text || "")).length;
-    const maxVisible = Math.max(0, Math.min(textLength, visibleLength == null ? textLength : visibleLength));
-    if (!Array.isArray(dialogue.textRubyRanges)) {
-      return [];
-    }
-    return dialogue.textRubyRanges.flatMap((range) => {
-      if (!range || typeof range !== "object") {
-        return [];
-      }
-      const start = Math.max(0, Math.min(textLength, Math.floor(Number(range.start) || 0)));
-      const end = Math.max(start, Math.min(textLength, Math.floor(Number(range.end) || 0)));
-      const ruby = String(range.ruby || range.text || "").trim();
-      return end > start && end <= maxVisible && ruby ? [{ start, end, ruby }] : [];
-    });
-  }
-
-  function drawDialogueLine(context, line, x, y, layout, textColors, textRubyRanges, fontFamily) {
-    const characters = Array.from(line.text);
-    const baseFont = context.font;
-    const characterWidths = characters.map((character) => context.measureText(character).width);
-    const characterOffsets = [0];
-    characterWidths.forEach((width) => characterOffsets.push(characterOffsets[characterOffsets.length - 1] + width));
-    let offset = 0;
-    let segmentStart = 0;
-    let segmentColor = textColors[line.start] || null;
-    const drawSegment = (end) => {
-      if (end <= segmentStart) {
-        return;
-      }
-      const segment = characters.slice(segmentStart, end).join("");
-      if (!segment) {
-        return;
-      }
-      if (segmentColor) {
-        context.fillStyle = segmentColor;
-      } else {
-        setDialogueGradient(
-          context,
-          x + offset,
-          y - layout.dialogueFontSize,
-          y + Math.max(3, layout.dialogueFontSize * 0.12)
-        );
-      }
-      drawOutlinedText(context, segment, x + offset, y);
-      offset += context.measureText(segment).width;
-    };
-
-    for (let index = 0; index < characters.length; index += 1) {
-      const color = textColors[line.start + index] || null;
-      if (color !== segmentColor) {
-        drawSegment(index);
-        segmentStart = index;
-        segmentColor = color;
-      }
-    }
-    drawSegment(characters.length);
-
-    if (!textRubyRanges.length) {
-      return;
-    }
-    context.save();
-    context.textAlign = "center";
-    context.textBaseline = "alphabetic";
-    context.font = `500 ${Math.max(10, Math.round(layout.dialogueFontSize * 0.48))}px ${fontFamily}`;
-    textRubyRanges.forEach((range) => {
-      // Keep a ruby annotation on one visual line. A phrase that wraps is
-      // still rendered above the line where it starts instead of duplicating
-      // the annotation on every wrapped line.
-      if (range.start < line.start || range.start >= line.end) {
-        return;
-      }
-      const rangeStart = range.start;
-      const rangeEnd = Math.min(line.end, range.end);
-      if (rangeEnd <= rangeStart) {
-        return;
-      }
-      const localStart = rangeStart - line.start;
-      const localEnd = rangeEnd - line.start;
-      const spanStartX = x + characterOffsets[localStart];
-      const spanEndX = x + characterOffsets[localEnd];
-      const centerX = (spanStartX + spanEndX) / 2;
-      const rubySize = fitFontSize(
-        context,
-        range.ruby,
-        Math.max(10, layout.dialogueFontSize * 0.48),
-        Math.max(8, layout.dialogueFontSize * 0.28),
-        Math.max(spanEndX - spanStartX, layout.textWidth),
-        500,
-        fontFamily
-      );
-      context.font = `500 ${rubySize}px ${fontFamily}`;
-      context.strokeStyle = "rgb(7 27 58 / 86%)";
-      context.lineWidth = Math.max(0.75, 0.9 * layout.scale);
-      context.shadowColor = "rgb(0 0 0 / 34%)";
-      context.shadowBlur = Math.max(0.35, 0.55 * layout.scale);
-      context.shadowOffsetX = Math.max(0.15, 0.3 * layout.scale);
-      context.shadowOffsetY = Math.max(0.2, 0.4 * layout.scale);
-      setDialogueGradient(
-        context,
-        centerX,
-        y - layout.dialogueFontSize * 1.52,
-        y - layout.dialogueFontSize * 1.04
-      );
-      drawOutlinedText(context, range.ruby, centerX, y - Math.max(12, layout.dialogueFontSize * 1.08));
-    });
-    context.restore();
-    context.font = baseFont;
   }
 
   function fitFontSize(context, text, preferredSize, minimumSize, maxWidth, weight, fontFamily) {
@@ -454,6 +386,7 @@
       const allUrls = Array.from(new Set([
         STORY_DIALOGUE_BOX_URL,
         STORY_NAME_BOX_URL,
+        STORY_DIALOGUE_UI_CONTROLS_URL,
         ...urls.filter(Boolean)
       ]));
       const entries = allUrls.map((url) => loadImage(url)).filter(Boolean);
@@ -465,85 +398,163 @@
       })).then(() => entries);
     }
 
-    function clearImageCache() {
-      imageCache.forEach((entry) => {
-        if (!entry || !entry.image) {
-          return;
-        }
-        entry.image.onload = null;
-        entry.image.onerror = null;
-        entry.image.src = "";
-      });
-      imageCache.clear();
-    }
-
-    function drawDialogue(context, scene, width, height, aspect, normalizedProgress, alpha) {
+    function drawDialogue(context, scene, width, height, aspect, normalizedProgress, alpha, fontScale = 1) {
       if (!scene.dialogue.text && !scene.dialogue.speaker) {
         return;
       }
       const layout = getDialogueLayout(width, height, aspect);
+      // Keep the dialogue box geometry stable while allowing stronger or more
+      // restrained body text. Line spacing follows the font size so multi-line
+      // dialogue remains legible in both landscape and portrait layouts.
+      const normalizedFontScale = Number.isFinite(Number(fontScale))
+        ? Math.max(STORY_DIALOGUE_FONT_SCALE_MIN, Math.min(STORY_DIALOGUE_FONT_SCALE_MAX, Number(fontScale)))
+        : 1;
+      layout.dialogueFontSize *= normalizedFontScale;
+      layout.lineHeight *= normalizedFontScale;
       const dialogueBox = loadImage(STORY_DIALOGUE_BOX_URL);
-      const speaker = String(scene.dialogue.speaker || "").trim();
-      const nameBox = speaker ? loadImage(STORY_NAME_BOX_URL) : null;
+      const nameBox = loadImage(STORY_NAME_BOX_URL);
+      const uiControls = loadImage(STORY_DIALOGUE_UI_CONTROLS_URL);
       if (dialogueBox && dialogueBox.ready) {
         context.drawImage(dialogueBox.image, layout.boxX, layout.boxY, layout.boxWidth, layout.boxHeight);
       } else {
         drawDialogueFallback(context, layout);
       }
+      if (nameBox && nameBox.ready) {
+        context.drawImage(nameBox.image, layout.nameX, layout.nameY, layout.nameWidth, layout.nameHeight);
+      } else {
+        drawNameFallback(context, layout);
+      }
 
+      // The supplied asset is a transparent strip containing the in-game
+      // record/auto controls. Its transparent padding is intentional. In
+      // landscape the strip is anchored to the lower-right edge; in portrait
+      // it follows the dialogue panel so the controls do not drift below it.
+      if (uiControls && uiControls.ready) {
+        const controlsScale = width / STORY_DIALOGUE_UI_CONTROLS_WIDTH;
+        const controlsWidth = STORY_DIALOGUE_UI_CONTROLS_WIDTH * controlsScale;
+        const controlsHeight = STORY_DIALOGUE_UI_CONTROLS_HEIGHT * controlsScale;
+        const controlsY = aspect === "9:16" ? layout.boxY : height - controlsHeight;
+        context.drawImage(
+          uiControls.image,
+          width - controlsWidth,
+          controlsY,
+          controlsWidth,
+          controlsHeight
+        );
+      }
+
+      context.globalAlpha = alpha * STORY_NAME_TEXT_OPACITY;
       context.textBaseline = "alphabetic";
+      context.fillStyle = "#fafaf8";
       context.strokeStyle = "rgb(7 27 58 / 86%)";
       context.lineJoin = "round";
       context.lineWidth = Math.max(1, 1.35 * layout.scale);
-      if (speaker) {
-        if (nameBox && nameBox.ready) {
-          context.drawImage(nameBox.image, layout.nameX, layout.nameY, layout.nameWidth, layout.nameHeight);
-        } else {
-          drawNameFallback(context, layout);
-        }
-        context.globalAlpha = alpha * STORY_NAME_TEXT_OPACITY;
-        context.fillStyle = "#fafaf8";
-        context.shadowColor = "rgb(0 0 0 / 72%)";
-        context.shadowBlur = Math.max(0.8, 1.35 * layout.scale);
-        context.shadowOffsetX = Math.max(0.6, 1.25 * layout.scale);
-        context.shadowOffsetY = Math.max(0.8, 1.65 * layout.scale);
+      context.shadowColor = "rgb(0 0 0 / 72%)";
+      context.shadowBlur = Math.max(0.8, 1.35 * layout.scale);
+      context.shadowOffsetX = Math.max(0.6, 1.25 * layout.scale);
+      context.shadowOffsetY = Math.max(0.8, 1.65 * layout.scale);
 
-        const speakerWidth = layout.nameWidth - 54 * layout.scale;
-        const fittedNameSize = fitFontSize(
-          context,
-          speaker,
-          layout.nameFontSize,
-          Math.max(12, 18 * layout.scale),
-          speakerWidth,
-          600,
-          activeFontFamily
-        );
-        context.font = `600 ${Math.round(fittedNameSize)}px ${activeFontFamily}`;
-        setDialogueGradient(
-          context,
-          layout.speakerX,
-          layout.speakerY - fittedNameSize,
-          layout.speakerY + Math.max(3, fittedNameSize * 0.12)
-        );
-        drawOutlinedText(context, speaker, layout.speakerX, layout.speakerY);
-      }
+      const speaker = scene.dialogue.speaker || "旁白";
+      const speakerWidth = layout.nameWidth - 54 * layout.scale;
+      const fittedNameSize = fitFontSize(
+        context,
+        speaker,
+        layout.nameFontSize,
+        Math.max(12, 18 * layout.scale),
+        speakerWidth,
+        600,
+        activeFontFamily
+      );
+      context.font = `600 ${Math.round(fittedNameSize)}px ${activeFontFamily}`;
+      setDialogueGradient(
+        context,
+        layout.speakerX,
+        layout.speakerY - fittedNameSize,
+        layout.speakerY + Math.max(3, fittedNameSize * 0.12)
+      );
+      drawOutlinedText(context, speaker, layout.speakerX, layout.speakerY);
 
       const visibleText = getVisibleDialogueText(scene.dialogue, normalizedProgress);
       context.globalAlpha = alpha * STORY_DIALOGUE_TEXT_OPACITY;
-      context.fillStyle = "#fafaf8";
       context.shadowColor = "rgb(0 0 0 / 34%)";
       context.shadowBlur = Math.max(0.5, 0.8 * layout.scale);
       context.shadowOffsetX = Math.max(0.25, 0.45 * layout.scale);
       context.shadowOffsetY = Math.max(0.35, 0.65 * layout.scale);
-      context.font = `500 ${Math.round(layout.dialogueFontSize)}px ${activeFontFamily}`;
       const maxDialogueLines = aspect === "9:16" ? 3 : 2;
-      const textColors = getDialogueTextColors(scene.dialogue);
-      const visibleLength = Array.from(visibleText).length;
-      const textRubyRanges = getDialogueTextRubyRanges(scene.dialogue, visibleLength);
-      getWrappedLineObjects(context, visibleText, layout.textWidth, maxDialogueLines).forEach((line, index) => {
-        const lineY = layout.textY + index * layout.lineHeight;
-        drawDialogueLine(context, line, layout.textX, lineY, layout, textColors, textRubyRanges, activeFontFamily);
+      const visibleCharacters = Array.from(visibleText);
+      const textColors = Array(visibleCharacters.length).fill(null);
+      const textFontScales = Array(visibleCharacters.length).fill(1);
+      (Array.isArray(scene.dialogue.textColorRanges) ? scene.dialogue.textColorRanges : []).forEach((range) => {
+        const start = Math.max(0, Math.min(visibleCharacters.length, Math.floor(Number(range.start) || 0)));
+        const end = Math.max(start, Math.min(visibleCharacters.length, Math.floor(Number(range.end) || 0)));
+        const color = String(range.color || "").trim();
+        if (end > start && /^#[0-9a-f]{6}$/i.test(color)) {
+          textColors.fill(color, start, end);
+        }
       });
+      (Array.isArray(scene.dialogue.textFontSizeRanges) ? scene.dialogue.textFontSizeRanges : []).forEach((range) => {
+        const start = Math.max(0, Math.min(visibleCharacters.length, Math.floor(Number(range.start) || 0)));
+        const end = Math.max(start, Math.min(visibleCharacters.length, Math.floor(Number(range.end) || 0)));
+        const rawScale = Number(range.scale ?? range.fontSize);
+        const scale = Number.isFinite(rawScale) ? (rawScale > 3 ? rawScale / 100 : rawScale) : 1;
+        if (end > start && Number.isFinite(scale)) {
+          textFontScales.fill(Math.max(0.6, Math.min(1.8, scale)), start, end);
+        }
+      });
+      const getTextFont = (index) => {
+        const localScale = index === null || index === undefined ? 1 : textFontScales[index] || 1;
+        return `500 ${Math.max(1, Math.round(layout.dialogueFontSize * localScale))}px ${activeFontFamily}`;
+      };
+      getWrappedStyledLines(context, visibleText, layout.textWidth, maxDialogueLines, getTextFont).forEach((line, index) => {
+        const lineY = layout.textY + index * layout.lineHeight;
+        let cursorX = layout.textX;
+        const positions = [];
+        line.items.forEach((item) => {
+          const font = getTextFont(item.index);
+          context.font = font;
+          const itemWidth = context.measureText(item.character).width;
+          positions.push({ ...item, x: cursorX, width: itemWidth });
+          const itemScale = item.index === null ? 1 : textFontScales[item.index] || 1;
+          const itemSize = layout.dialogueFontSize * itemScale;
+          const color = item.index === null ? null : textColors[item.index];
+          if (color) {
+            context.fillStyle = color;
+          } else {
+            setDialogueGradient(
+              context,
+              cursorX,
+              lineY - itemSize,
+              lineY + Math.max(3, itemSize * 0.12)
+            );
+          }
+          drawOutlinedText(context, item.character, cursorX, lineY);
+          cursorX += itemWidth;
+        });
+
+        const rubyRanges = Array.isArray(scene.dialogue.textRubyRanges) ? scene.dialogue.textRubyRanges : [];
+        rubyRanges.forEach((range) => {
+          const covered = positions.filter((item) => item.index !== null && item.index >= range.start && item.index < range.end);
+          if (!covered.length || !range.ruby) {
+            return;
+          }
+          const rubySize = Math.max(10, Math.round(layout.dialogueFontSize * 0.42));
+          const rubyX = (covered[0].x + covered[covered.length - 1].x + covered[covered.length - 1].width) / 2;
+          const rubyY = lineY - layout.dialogueFontSize * 1.08;
+          context.font = `600 ${rubySize}px ${activeFontFamily}`;
+          context.textAlign = "center";
+          context.fillStyle = "#f8f8f5";
+          context.strokeStyle = "rgb(7 27 58 / 86%)";
+          context.lineWidth = Math.max(1, 1.1 * layout.scale);
+          context.shadowColor = "rgb(0 0 0 / 42%)";
+          context.shadowBlur = Math.max(0.5, 0.7 * layout.scale);
+          context.strokeText(String(range.ruby), rubyX, rubyY);
+          context.fillText(String(range.ruby), rubyX, rubyY);
+          context.textAlign = "left";
+          context.shadowColor = "rgb(0 0 0 / 34%)";
+          context.shadowBlur = Math.max(0.5, 0.8 * layout.scale);
+        });
+      });
+      context.textAlign = "left";
       context.shadowColor = "transparent";
       context.shadowBlur = 0;
       context.shadowOffsetX = 0;
@@ -593,6 +604,12 @@
       context.imageSmoothingEnabled = true;
       context.imageSmoothingQuality = "high";
       const normalizedProgress = Math.max(0, Math.min(1, Number(progress) || 0));
+      const requestedFontScale = typeof options.getFontScale === "function"
+        ? Number(options.getFontScale())
+        : 1;
+      const fontScale = Number.isFinite(requestedFontScale)
+        ? Math.max(STORY_DIALOGUE_FONT_SCALE_MIN, Math.min(STORY_DIALOGUE_FONT_SCALE_MAX, requestedFontScale))
+        : 1;
       const actorProgress = scene.animateActors
         ? Math.max(0, Math.min(1, Number(scene.actorAnimationProgress) || 0))
         : 1;
@@ -665,14 +682,13 @@
 
       context.globalAlpha = 1;
       context.filter = "none";
-      drawDialogue(context, scene, width, height, aspect, normalizedProgress, 1);
+      drawDialogue(context, scene, width, height, aspect, normalizedProgress, 1, fontScale);
       context.restore();
     }
 
     return {
       render,
       preload,
-      clearImageCache,
       setFont,
       getFont: () => ({ key: activeFontKey, family: activeFontFamily, label: getFontOption(activeFontKey).label })
     };

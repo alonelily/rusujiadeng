@@ -12,7 +12,7 @@
       content="Atlas Academy FGO 礼装与从者立绘资源浏览器"
     />
     <title>如数迦贞</title>
-    <link rel="stylesheet" href="styles.css?v=20260828-dialogue-ruby-2" />
+    <link rel="stylesheet" href="styles.css?v=20260829-dialogue-style-tabs-1" />
   </head>
   <body class="is-intro-open">
     <section class="source-intro" id="sourceIntro" role="dialog" aria-modal="true" aria-labelledby="sourceIntroTitle">
@@ -40,12 +40,12 @@
           <header class="intro-update-heading">
             <span>VERSION UPDATE</span>
             <strong id="updateNoticeTitle">更新公告</strong>
-            <time datetime="2026-08-28">2026.08.28</time>
+            <time datetime="2026-08-30">2026.08.30</time>
           </header>
           <ul class="intro-update-list">
             <li>
               <strong>本地作品与备份</strong>
-              <span>剧情作品会自动保存在本机，并支持导出、恢复 .rusu 备份。</span>
+              <span>剧情作品会自动保存在本机，并支持导出、恢复 .zip 备份（兼容旧 .rusu 文件）。</span>
             </li>
             <li>
               <strong>外部素材导入</strong>
@@ -278,7 +278,7 @@
             <span id="resultLabel">项资源</span>
           </div>
           <div class="version-meta">
-            <span id="versionTime">更新时间 --</span>
+              <span id="versionTime">更新时间 --</span>
             <span id="versionHash">版本 --</span>
           </div>
         </section>
@@ -311,7 +311,7 @@
               <button class="secondary-button" id="storyNewProjectButton" type="button">新建作品</button>
               <button class="secondary-button" id="storyBackupButton" type="button">备份</button>
               <button class="secondary-button" id="storyImportButton" type="button">恢复备份</button>
-              <input id="storyImportInput" type="file" accept=".rusu,.json,application/json,application/vnd.rusu-project+json" hidden />
+              <input id="storyImportInput" type="file" accept=".zip,.rusu,.json,application/zip,application/json,application/vnd.rusu-project+json" hidden />
               <button class="secondary-button" id="storyExportButton" type="button" hidden>导出剧情 JSON</button>
               <button class="primary-button" id="storyVideoExportButton" type="button">导出剧情视频 · 1080p</button>
             </div>
@@ -340,6 +340,10 @@
                 <option value="system">系统默认</option>
                 <option value="font-fzzhengzhong">方正正中黑 · TTF</option>
               </select>
+            </label>
+            <label class="story-field story-font-size-field">
+              <span>正文大小 <output id="storyDialogueFontSizeValue" for="storyDialogueFontSizeInput">100%</output></span>
+              <input id="storyDialogueFontSizeInput" type="range" min="80" max="140" step="5" value="100" />
             </label>
             <span class="story-project-save-status" id="storyProjectSaveStatus" aria-live="polite">正在准备本地作品库</span>
             <button class="primary-button" id="storyAddSceneButton" type="button">新增分镜</button>
@@ -388,7 +392,7 @@
 
               <nav class="story-tool-tabs" id="storyToolTabs" aria-label="剧情编辑功能">
                 <button type="button" data-story-tool="resources" aria-selected="false">画面素材 <span id="storyActorToolCount">0</span></button>
-                <button class="is-active" type="button" data-story-tool="dialogue" aria-selected="true">对话与表情 <span id="storyDialogueToolCount">1</span></button>
+                <button class="is-active" type="button" data-story-tool="dialogue" aria-selected="true">对话与表情<span id="storyDialogueToolCount">1</span></button>
                 <button type="button" data-story-tool="animation" aria-selected="false">动画 <span id="storyAnimationToolCount">0</span></button>
               </nav>
 
@@ -535,7 +539,7 @@
                       <input id="storySpeakerInput" type="text" maxlength="40" placeholder="旁白" />
                     </label>
                     <label class="story-field">
-                      <span>本段时长（秒）</span>
+                        <span>本段时长（秒）</span>
                       <input id="storyDurationInput" type="number" min="1" max="120" step="1" />
                     </label>
                   </div>
@@ -543,9 +547,23 @@
                     <span>对话内容</span>
                     <textarea id="storyDialogueInput" rows="4" maxlength="500" placeholder="输入当前对话段落的台词"></textarea>
                   </label>
-                  <div class="story-dialogue-color-panel">
+                  <div class="story-dialogue-style-editor" id="storyDialogueStyleEditor">
+                    <div class="story-dialogue-style-toolbar">
+                      <div class="story-dialogue-style-heading">
+                        <strong>选中文字样式</strong>
+                        <span id="storyDialogueStyleSelectionValue">尚未选择文字</span>
+                      </div>
+                      <div class="story-dialogue-style-tabs" id="storyDialogueStyleTabs" role="tablist" aria-label="对白文字效果">
+                        <button class="is-active" type="button" role="tab" aria-selected="true" aria-controls="storyDialogueColorPanel" data-dialogue-style-tab="color">颜色</button>
+                        <button type="button" role="tab" aria-selected="false" aria-controls="storyDialogueFontSizePanel" data-dialogue-style-tab="font-size">字号</button>
+                        <button type="button" role="tab" aria-selected="false" aria-controls="storyDialogueRubyPanel" data-dialogue-style-tab="ruby">小字</button>
+                      </div>
+                    </div>
+                    <div class="story-dialogue-style-viewport">
+                      <div class="story-dialogue-style-track" id="storyDialogueStyleTrack">
+                  <section class="story-dialogue-color-panel story-dialogue-style-panel is-active" id="storyDialogueColorPanel" data-dialogue-style-panel="color" role="tabpanel" aria-label="对白颜色">
                     <div class="story-dialogue-color-heading">
-                      <strong>对白局部颜色</strong>
+                      <strong>对白颜色</strong>
                       <span id="storyDialogueColorSelectionValue">尚未选择文字</span>
                     </div>
                     <div class="story-dialogue-color-controls">
@@ -553,15 +571,31 @@
                         <span>所选文字颜色</span>
                         <input id="storyDialogueColorInput" type="color" value="#f3c86b" />
                       </label>
-                      <button class="primary-button" id="storyDialogueColorApplyButton" type="button">应用到选中文字</button>
+                      <button class="primary-button" id="storyDialogueColorApplyButton" type="button">应用颜色</button>
                       <button class="secondary-button" id="storyDialogueColorClearSelectionButton" type="button">恢复所选文字</button>
                       <button class="secondary-button" id="storyDialogueColorResetButton" type="button">清除全部颜色</button>
                     </div>
                     <div class="story-dialogue-color-range-list" id="storyDialogueColorRangeList"></div>
-                  </div>
-                  <div class="story-dialogue-ruby-panel">
+                  </section>
+                  <section class="story-dialogue-font-size-panel story-dialogue-style-panel" id="storyDialogueFontSizePanel" data-dialogue-style-panel="font-size" role="tabpanel" aria-label="对白字号" aria-hidden="true">
                     <div class="story-dialogue-color-heading">
-                      <strong>对白小字</strong>
+                      <strong>对白字号</strong>
+                      <span id="storyDialogueFontSizeSelectionValue">尚未选择文字</span>
+                    </div>
+                    <div class="story-dialogue-font-size-controls">
+                      <label class="story-field story-font-size-range-field">
+                        <span>所选文字大小 <output id="storyDialogueRangeFontSizeValue" for="storyDialogueRangeFontSizeInput">100%</output></span>
+                        <input id="storyDialogueRangeFontSizeInput" type="range" min="60" max="180" step="5" value="100" />
+                      </label>
+                      <button class="primary-button" id="storyDialogueFontSizeApplyButton" type="button">应用字号</button>
+                      <button class="secondary-button" id="storyDialogueFontSizeClearSelectionButton" type="button">恢复所选字号</button>
+                      <button class="secondary-button" id="storyDialogueFontSizeResetButton" type="button">清除全部字号</button>
+                    </div>
+                    <div class="story-dialogue-font-size-range-list" id="storyDialogueFontSizeRangeList"></div>
+                  </section>
+                  <section class="story-dialogue-ruby-panel story-dialogue-style-panel" id="storyDialogueRubyPanel" data-dialogue-style-panel="ruby" role="tabpanel" aria-label="对白小字标注" aria-hidden="true">
+                    <div class="story-dialogue-color-heading">
+                      <strong>对白小字标注</strong>
                       <span id="storyDialogueRubySelectionValue">尚未选择文字</span>
                     </div>
                     <div class="story-dialogue-ruby-controls">
@@ -569,12 +603,14 @@
                         <span>选中文字上方显示</span>
                         <input id="storyDialogueRubyInput" type="text" maxlength="40" placeholder="输入小字内容" />
                       </label>
-                      <button class="primary-button" id="storyDialogueRubyApplyButton" type="button">应用小字</button>
+                      <button class="primary-button" id="storyDialogueRubyApplyButton" type="button">应用标注</button>
                       <button class="secondary-button" id="storyDialogueRubyClearSelectionButton" type="button">清除所选小字</button>
                       <button class="secondary-button" id="storyDialogueRubyResetButton" type="button">清除全部小字</button>
                     </div>
                     <div class="story-dialogue-ruby-list" id="storyDialogueRubyList"></div>
-                  </div>
+                  </section>
+                      </div>
+                    </div>
                 </div>
               </section>
             </section>
@@ -830,8 +866,8 @@
             </div>
 
             <div class="record-navigation">
-              <button id="previousRecordButton" type="button"><span aria-hidden="true">&#x2190;</span> 上一项</button>
-              <button id="nextRecordButton" type="button">下一项 <span aria-hidden="true">&#x2192;</span></button>
+              <button id="previousRecordButton" type="button"><span aria-hidden="true">&#x2190;</span> 上一页</button>
+              <button id="nextRecordButton" type="button">下一页<span aria-hidden="true">&#x2192;</span></button>
             </div>
           </aside>
         </div>
@@ -840,8 +876,8 @@
 
     <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
     <script src="story-picker.js?v=20260825-picker-reset-1" defer></script>
-    <script src="story-renderer.js?v=20260828-dialogue-ruby-2" defer></script>
-    <script src="app.js?v=20260828-dialogue-ruby-2" defer></script>
+    <script src="story-renderer.js?v=20260830-dialogue-controls-1" defer></script>
+    <script src="app.js?v=20260830-duplicate-actors-1" defer></script>
   </body>
 </html>
 

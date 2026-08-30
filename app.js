@@ -18,6 +18,21 @@
   const STORY_VARIANT_CACHE_VERSION = 2;
   const STORY_BGM_PAGE_SIZE = 80;
   const STORY_ACTOR_ENTRY_DURATION = 0.7;
+  // Exporting is an offline batch job. Prefer the encoder's low-latency path
+  // and let the platform use hardware when it has a suitable implementation.
+  // Both values are accepted by WebCodecs and are probed before encoding.
+  const STORY_EXPORT_LATENCY_MODE = "realtime";
+  const STORY_EXPORT_HARDWARE_ACCELERATION = "prefer-hardware";
+  const STORY_EXPORT_YIELD_INTERVAL = 60;
+  const STORY_EXPORT_KEYFRAME_INTERVAL = 5;
+  const STORY_TYPEWRITER_CHARACTERS_PER_SECOND = 20;
+  const STORY_DIALOGUE_FONT_SCALE_SETTING = "story-dialogue-font-scale-v1";
+  const STORY_DIALOGUE_FONT_SCALE_DEFAULT = 1;
+  const STORY_DIALOGUE_FONT_SCALE_MIN = 0.8;
+  const STORY_DIALOGUE_FONT_SCALE_MAX = 1.4;
+  const STORY_DIALOGUE_RANGE_FONT_SCALE_DEFAULT = 1;
+  const STORY_DIALOGUE_RANGE_FONT_SCALE_MIN = 0.6;
+  const STORY_DIALOGUE_RANGE_FONT_SCALE_MAX = 1.8;
 
   const DIALOGUE_ASSET_SOURCES = [
     { key: "charaFigure", label: "常规立绘" },
@@ -200,6 +215,8 @@
     storyProjectLibraryTabBar: document.getElementById("storyProjectLibraryTabBar"),
     storyAspectSelect: document.getElementById("storyAspectSelect"),
     storyFontSelect: document.getElementById("storyFontSelect"),
+    storyDialogueFontSizeInput: document.getElementById("storyDialogueFontSizeInput"),
+    storyDialogueFontSizeValue: document.getElementById("storyDialogueFontSizeValue"),
     storyAddSceneButton: document.getElementById("storyAddSceneButton"),
     storySceneCount: document.getElementById("storySceneCount"),
     storySceneList: document.getElementById("storySceneList"),
@@ -261,12 +278,23 @@
     storySpeakerInput: document.getElementById("storySpeakerInput"),
     storyDurationInput: document.getElementById("storyDurationInput"),
     storyDialogueInput: document.getElementById("storyDialogueInput"),
+    storyDialogueStyleEditor: document.getElementById("storyDialogueStyleEditor"),
+    storyDialogueStyleSelectionValue: document.getElementById("storyDialogueStyleSelectionValue"),
+    storyDialogueStyleTabs: document.getElementById("storyDialogueStyleTabs"),
+    storyDialogueStyleTrack: document.getElementById("storyDialogueStyleTrack"),
     storyDialogueColorSelectionValue: document.getElementById("storyDialogueColorSelectionValue"),
     storyDialogueColorInput: document.getElementById("storyDialogueColorInput"),
     storyDialogueColorApplyButton: document.getElementById("storyDialogueColorApplyButton"),
     storyDialogueColorClearSelectionButton: document.getElementById("storyDialogueColorClearSelectionButton"),
     storyDialogueColorResetButton: document.getElementById("storyDialogueColorResetButton"),
     storyDialogueColorRangeList: document.getElementById("storyDialogueColorRangeList"),
+    storyDialogueFontSizeSelectionValue: document.getElementById("storyDialogueFontSizeSelectionValue"),
+    storyDialogueRangeFontSizeInput: document.getElementById("storyDialogueRangeFontSizeInput"),
+    storyDialogueRangeFontSizeValue: document.getElementById("storyDialogueRangeFontSizeValue"),
+    storyDialogueFontSizeApplyButton: document.getElementById("storyDialogueFontSizeApplyButton"),
+    storyDialogueFontSizeClearSelectionButton: document.getElementById("storyDialogueFontSizeClearSelectionButton"),
+    storyDialogueFontSizeResetButton: document.getElementById("storyDialogueFontSizeResetButton"),
+    storyDialogueFontSizeRangeList: document.getElementById("storyDialogueFontSizeRangeList"),
     storyDialogueRubySelectionValue: document.getElementById("storyDialogueRubySelectionValue"),
     storyDialogueRubyInput: document.getElementById("storyDialogueRubyInput"),
     storyDialogueRubyApplyButton: document.getElementById("storyDialogueRubyApplyButton"),
@@ -412,6 +440,7 @@
   let storyProjectAutosaveTimer = null;
   let pendingStoryProjectSave = null;
   let storyProjectWriteQueue = Promise.resolve();
+  let activeStoryDialogueStyleTab = "color";
 
   function updateViewportMetrics() {
     const viewport = window.visualViewport;
@@ -2655,9 +2684,44 @@
 
   const NATIVE_SAVE_CHUNK_SIZE = 2 * 1024 * 1024;
 
+  // MediaRecorder may return a Blob from another realm in Android WebView;
+  // `instanceof Blob` is not reliable there. Keep binary checks structural so
+  // large exports always use the streaming path.
+  function getBlobLikeSize(value) {
+    const size = Number(value && value.size);
+    return Number.isFinite(size) && size > 0 ? size : 0;
+  }
+
+  async function getWritableChunkBytes(chunk) {
+    const data = chunk && Object.prototype.hasOwnProperty.call(chunk, "data")
+      ? chunk.data
+      : chunk;
+    if (!data) return null;
+    if (data instanceof Uint8Array) return data;
+    if (ArrayBuffer.isView(data)) {
+      return new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+    }
+    if (data instanceof ArrayBuffer) return new Uint8Array(data);
+    if (typeof data.byteLength === "number") {
+      try { return new Uint8Array(data); } catch (_error) { return null; }
+    }
+    if (typeof data.length === "number") {
+      try { return Uint8Array.from(data); } catch (_error) { return null; }
+    }
+    if (typeof data.arrayBuffer === "function") {
+      try {
+        const buffer = await data.arrayBuffer();
+        return buffer ? new Uint8Array(buffer) : null;
+      } catch (_error) {
+        return null;
+      }
+    }
+    return null;
+  }
+
   async function saveBlob(blob, filename, dialogTitle) {
     if (isNativeDirectFileSaverAvailable()) {
-      if (!(blob instanceof Blob) || !blob.size) {
+      if (!getBlobLikeSize(blob)) {
         throw new Error("无法保存空文件");
       }
       let uri = null;
@@ -2677,7 +2741,7 @@
       return { uri };
     }
     if (isNativeApp() && typeof window.Capacitor.nativePromise === "function") {
-      if (!(blob instanceof Blob) || !blob.size) {
+      if (!getBlobLikeSize(blob)) {
         throw new Error("无法保存空文件");
       }
       let writeResult = null;
@@ -2720,6 +2784,58 @@
     anchor.click();
     anchor.remove();
     window.setTimeout(() => URL.revokeObjectURL(blobUrl), 30000);
+  }
+
+  function createNativeVideoChunkWriter(filename, mimeType) {
+    if (!isNativeDirectFileSaverAvailable()) {
+      return null;
+    }
+    let uri = null;
+    let pending = null;
+    let queue = Promise.resolve();
+    const enqueue = (blob, complete) => {
+      if (!getBlobLikeSize(blob)) {
+        return;
+      }
+      queue = queue.then(async () => {
+        const result = await window.Capacitor.nativePromise("DirectFileSaver", "saveToDownloads", {
+          filename,
+          mimeType,
+          data: await blobToBase64(blob),
+          uri,
+          append: Boolean(uri),
+          complete
+        });
+        uri = result && result.uri ? result.uri : uri;
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+    };
+    return {
+      append(blob) {
+        const size = getBlobLikeSize(blob);
+        if (!size || typeof blob.slice !== "function") {
+          return;
+        }
+        for (let offset = 0; offset < size; offset += NATIVE_SAVE_CHUNK_SIZE) {
+          const chunk = blob.slice(offset, Math.min(size, offset + NATIVE_SAVE_CHUNK_SIZE));
+          if (pending) {
+            enqueue(pending, false);
+          }
+          pending = chunk;
+        }
+      },
+      async close() {
+        if (pending) {
+          enqueue(pending, true);
+          pending = null;
+        }
+        await queue;
+        if (!uri) {
+          throw new Error("视频文件未写入下载目录");
+        }
+        return { uri, filename };
+      }
+    };
   }
 
   function blobToBase64(blob) {
@@ -2846,6 +2962,17 @@
     return `project-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
   }
 
+  function createStoryActorInstanceId(scene) {
+    let actorId;
+    do {
+      const suffix = window.crypto && typeof window.crypto.randomUUID === "function"
+        ? window.crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+      actorId = `actor-${suffix}`;
+    } while (scene && scene.actors.some((actor) => actor.assetId === actorId));
+    return actorId;
+  }
+
   function createStoryScene() {
     const dialogue = createStoryDialogue();
     return {
@@ -2876,6 +3003,7 @@
         value.textColorStart,
         value.textColor
       ),
+      textFontSizeRanges: normalizeStoryTextFontSizeRanges(value.textFontSizeRanges, text),
       textRubyRanges: normalizeStoryTextRubyRanges(value.textRubyRanges, text),
       actorVariants: normalizeStoryDialogueVariants(value.actorVariants),
       actorColorModes: normalizeStoryDialogueColorModes(value.actorColorModes)
@@ -2936,6 +3064,110 @@
     return start > 0 && start < textLength && color
       ? [{ start, end: textLength, color }]
       : [];
+  }
+
+  function normalizeStoryTextFontScale(value, fallback = STORY_DIALOGUE_RANGE_FONT_SCALE_DEFAULT) {
+    const numericValue = Number(value);
+    if (!Number.isFinite(numericValue)) {
+      return fallback;
+    }
+    const scale = numericValue > 3 ? numericValue / 100 : numericValue;
+    return Math.max(
+      STORY_DIALOGUE_RANGE_FONT_SCALE_MIN,
+      Math.min(STORY_DIALOGUE_RANGE_FONT_SCALE_MAX, scale)
+    );
+  }
+
+  function compactStoryTextFontSizeRanges(sizes) {
+    const ranges = [];
+    let start = 0;
+    while (start < sizes.length) {
+      const scale = sizes[start];
+      if (!Number.isFinite(scale)) {
+        start += 1;
+        continue;
+      }
+      let end = start + 1;
+      while (end < sizes.length && sizes[end] === scale) {
+        end += 1;
+      }
+      ranges.push({ start, end, scale });
+      start = end;
+    }
+    return ranges;
+  }
+
+  function getStoryTextFontSizeMap(ranges, textLength) {
+    const sizes = Array(Math.max(0, textLength)).fill(null);
+    if (!Array.isArray(ranges)) {
+      return sizes;
+    }
+    ranges.forEach((range) => {
+      if (!range || typeof range !== "object") {
+        return;
+      }
+      const start = Math.max(0, Math.min(sizes.length, Math.floor(Number(range.start) || 0)));
+      const end = Math.max(start, Math.min(sizes.length, Math.floor(Number(range.end) || 0)));
+      const scale = normalizeStoryTextFontScale(range.scale ?? range.fontSize, NaN);
+      if (!Number.isFinite(scale) || end <= start) {
+        return;
+      }
+      sizes.fill(scale, start, end);
+    });
+    return sizes;
+  }
+
+  function normalizeStoryTextFontSizeRanges(value, text) {
+    const textLength = Array.from(String(text || "")).length;
+    if (!Array.isArray(value)) {
+      return [];
+    }
+    return compactStoryTextFontSizeRanges(
+      getStoryTextFontSizeMap(value, textLength)
+    );
+  }
+
+  function updateStoryTextFontSizeRangesForEdit(oldText, newText, ranges) {
+    const oldCharacters = Array.from(String(oldText || ""));
+    const newCharacters = Array.from(String(newText || ""));
+    const oldSizes = getStoryTextFontSizeMap(ranges, oldCharacters.length);
+    let prefixLength = 0;
+    while (
+      prefixLength < oldCharacters.length &&
+      prefixLength < newCharacters.length &&
+      oldCharacters[prefixLength] === newCharacters[prefixLength]
+    ) {
+      prefixLength += 1;
+    }
+    let suffixLength = 0;
+    while (
+      suffixLength < oldCharacters.length - prefixLength &&
+      suffixLength < newCharacters.length - prefixLength &&
+      oldCharacters[oldCharacters.length - suffixLength - 1] === newCharacters[newCharacters.length - suffixLength - 1]
+    ) {
+      suffixLength += 1;
+    }
+    const oldChangeEnd = oldCharacters.length - suffixLength;
+    const newChangeEnd = newCharacters.length - suffixLength;
+    let inheritedScale = null;
+    if (oldChangeEnd > prefixLength) {
+      const firstScale = oldSizes[prefixLength] ?? null;
+      if (firstScale !== null && oldSizes.slice(prefixLength, oldChangeEnd).every((scale) => scale === firstScale)) {
+        inheritedScale = firstScale;
+      }
+    } else {
+      const beforeScale = oldSizes[prefixLength - 1] ?? null;
+      const afterScale = oldSizes[prefixLength] ?? null;
+      if (beforeScale !== null && beforeScale === afterScale) {
+        inheritedScale = beforeScale;
+      }
+    }
+    const nextSizes = [
+      ...oldSizes.slice(0, prefixLength),
+      ...Array(Math.max(0, newChangeEnd - prefixLength)).fill(inheritedScale),
+      ...oldSizes.slice(oldChangeEnd)
+    ];
+    return compactStoryTextFontSizeRanges(nextSizes.slice(0, newCharacters.length));
   }
 
   function updateStoryTextColorRangesForEdit(oldText, newText, ranges) {
@@ -3172,6 +3404,10 @@
           selectedActorId: scene.selectedActorId || activeDialogue.actorId || null,
           actors: Array.isArray(scene.actors) ? scene.actors.map((actor) => ({
             ...actor,
+            assetId: String(actor && (actor.assetId || actor.id) || createStoryActorInstanceId()),
+            sourceCharacterId: String(actor && (
+              actor.sourceCharacterId || actor.characterId || actor.assetId || actor.id
+            ) || "unknown"),
             characterName: actor && (actor.characterName || actor.name) ? String(actor.characterName || actor.name).trim() : null,
             sourceCharacterName: actor && (actor.sourceCharacterName || actor.characterName || actor.name)
               ? String(actor.sourceCharacterName || actor.characterName || actor.name).trim()
@@ -3385,7 +3621,11 @@
     dom.storyProjectSaveStatus.dataset.state = stateName;
   }
 
-  function saveStoryProject() {
+  function saveStoryProject(options = {}) {
+    if (options.deferred) {
+      scheduleStoryProjectAutosave();
+      return;
+    }
     try {
       const project = serializeStoryProject();
       localStorage.setItem(STORY_PROJECT_STORAGE_KEY, JSON.stringify(project));
@@ -3401,6 +3641,9 @@
       cancelAnimationFrame(state.story.playbackFrame);
       state.story.playbackFrame = null;
       dom.storyPlayButton.textContent = "▶";
+    }
+    if (!open && storyRenderer && typeof storyRenderer.clearImageCache === "function") {
+      storyRenderer.clearImageCache();
     }
     state.story.open = Boolean(open);
     dom.storyGeneratorPanel.hidden = !state.story.open;
@@ -3539,10 +3782,11 @@
     };
   }
 
-  function scheduleStoryProjectAutosave(project) {
+  function scheduleStoryProjectAutosave(project = null) {
     pendingStoryProjectSave = {
       projectId: state.story.projectId,
-      project: JSON.parse(JSON.stringify(project))
+      // Deferred edits are serialized only when the idle save actually runs.
+      project
     };
     updateStoryProjectSaveStatus("正在自动保存", "saving");
     window.clearTimeout(storyProjectAutosaveTimer);
@@ -3559,6 +3803,13 @@
     if (!pending) {
       return storyProjectWriteQueue;
     }
+    const serializedProject = pending.project || serializeStoryProject();
+    try {
+      localStorage.setItem(STORY_PROJECT_STORAGE_KEY, JSON.stringify(serializedProject));
+      localStorage.setItem(STORY_PROJECT_ACTIVE_KEY, pending.projectId);
+    } catch (_error) {
+      // IndexedDB remains the durable fallback when localStorage is full.
+    }
     if (!state.story.storageReady) {
       return storyProjectWriteQueue;
     }
@@ -3568,7 +3819,7 @@
       if (existing && existing.deletedAt) {
         return;
       }
-      const record = createStoryProjectRecord(pending.projectId, pending.project, existing);
+      const record = createStoryProjectRecord(pending.projectId, serializedProject, existing);
       await writeStoryProjectRecord(record);
       if (state.story.projectId === pending.projectId) {
         updateStoryProjectSaveStatus("已自动保存到本机", "saved");
@@ -3775,6 +4026,7 @@
     const project = state.story.project;
     dom.storyProjectName.value = project.title;
     dom.storyAspectSelect.value = project.aspect;
+    updateStoryDialogueFontSizeControl();
     dom.storySceneCount.textContent = `${project.scenes.length} 张`;
     renderStorySceneList();
     updateStorySceneControls();
@@ -3788,6 +4040,7 @@
       const button = document.createElement("button");
       button.className = "story-scene-card";
       button.type = "button";
+      button.dataset.sceneId = scene.id;
       button.classList.toggle("is-active", scene.id === activeScene.id);
       button.addEventListener("click", () => {
         state.story.activeSceneId = scene.id;
@@ -3799,6 +4052,8 @@
         const image = document.createElement("img");
         image.src = scene.background.url;
         image.alt = "";
+        image.loading = "lazy";
+        image.decoding = "async";
         thumb.append(image);
       } else {
         thumb.textContent = String(index + 1).padStart(2, "0");
@@ -3815,6 +4070,22 @@
       button.append(thumb, copy);
       dom.storySceneList.append(button);
     });
+  }
+
+  function updateStorySceneListItem(scene) {
+    if (!scene || !dom.storySceneList) {
+      return;
+    }
+    const item = Array.from(dom.storySceneList.children).find((node) => node.dataset.sceneId === scene.id);
+    if (!item) {
+      return;
+    }
+    const dialogues = getStoryDialogues(scene);
+    const firstText = dialogues.find((dialogue) => dialogue.text)?.text || "";
+    const meta = item.querySelector(".story-scene-copy span");
+    if (meta) {
+      meta.textContent = `${scene.duration} 秒 · ${dialogues.length} 段${firstText ? ` · ${firstText}` : " · 空白画面"}`;
+    }
   }
 
   function setStoryTool(tool) {
@@ -3927,6 +4198,7 @@
     dialogues.forEach((dialogue, index) => {
       const item = document.createElement("div");
       item.className = "story-dialogue-item";
+      item.dataset.dialogueId = dialogue.id;
       item.classList.toggle("is-active", dialogue.id === activeDialogue.id);
 
       const select = document.createElement("button");
@@ -3961,6 +4233,30 @@
       item.append(select, remove);
       dom.storyDialogueList.append(item);
     });
+  }
+
+  function updateStoryDialogueListItem(scene, dialogue) {
+    if (!scene || !dialogue || !dom.storyDialogueList) {
+      return;
+    }
+    const item = Array.from(dom.storyDialogueList.children).find((node) => node.dataset.dialogueId === dialogue.id);
+    if (!item) {
+      return;
+    }
+    const speaker = item.querySelector(".story-dialogue-copy strong");
+    const excerpt = item.querySelector(".story-dialogue-copy small");
+    const duration = item.querySelector(".story-dialogue-duration");
+    const variantCount = Object.keys(dialogue.actorVariants || {}).length;
+    if (speaker) {
+      speaker.textContent = dialogue.speaker || "旁白";
+    }
+    if (excerpt) {
+      excerpt.textContent = dialogue.text || "尚未填写台词";
+    }
+    if (duration) {
+      duration.textContent = variantCount ? `${dialogue.duration}s · ${variantCount}差分` : `${dialogue.duration}s`;
+    }
+    dom.storyDialogueSummary.textContent = `${getStoryDialogues(scene).length} 段 · 共 ${scene.duration} 秒`;
   }
 
   function renderStoryDialogueVariantControls(scene) {
@@ -4075,6 +4371,7 @@
       speaker: actor ? getStoryActorDisplayName(actor, actorIndex) : "",
       duration: current.duration,
       textColorRanges: current.textColorRanges,
+      textFontSizeRanges: current.textFontSizeRanges,
       textRubyRanges: current.textRubyRanges,
       actorVariants: current.actorVariants,
       actorColorModes: current.actorColorModes
@@ -4965,6 +5262,11 @@
         value,
         dialogue.textColorRanges
       );
+      dialogue.textFontSizeRanges = updateStoryTextFontSizeRangesForEdit(
+        dialogue.text,
+        value,
+        dialogue.textFontSizeRanges
+      );
       dialogue.textRubyRanges = updateStoryTextRubyRangesForEdit(
         dialogue.text,
         value,
@@ -4976,9 +5278,9 @@
       dialogue.duration = Math.max(1, Math.min(120, Number(value) || 4));
       syncStorySceneDuration(scene);
     }
-    saveStoryProject();
-    renderStoryDialogueList(scene);
-    renderStorySceneList();
+    saveStoryProject({ deferred: true });
+    updateStoryDialogueListItem(scene, dialogue);
+    updateStorySceneListItem(scene);
     renderStoryCanvas(scene, 1);
   }
 
@@ -5031,6 +5333,38 @@
     });
   }
 
+  function renderStoryDialogueFontSizeRanges(dialogue) {
+    dom.storyDialogueFontSizeRangeList.replaceChildren();
+    const characters = Array.from(dialogue.text || "");
+    dialogue.textFontSizeRanges.forEach((range) => {
+      const item = document.createElement("div");
+      item.className = "story-dialogue-font-size-range";
+      item.title = `第 ${range.start + 1}–${range.end} 字`;
+      const text = document.createElement("span");
+      text.className = "story-dialogue-font-size-range-text";
+      text.textContent = `「${characters.slice(range.start, range.end).join("") || "空白"}」`;
+      const size = document.createElement("span");
+      size.className = "story-dialogue-font-size-range-value";
+      size.textContent = `${Math.round(range.scale * 100)}%`;
+      const remove = document.createElement("button");
+      remove.className = "story-dialogue-font-size-range-remove";
+      remove.type = "button";
+      remove.textContent = "×";
+      remove.setAttribute("aria-label", `恢复${text.textContent}的默认字号`);
+      remove.addEventListener("click", (event) => {
+        event.stopPropagation();
+        applyStoryDialogueTextFontSize(range.start, range.end, null);
+      });
+      item.addEventListener("click", () => {
+        selectStoryDialogueTextRange(range.start, range.end);
+        dom.storyDialogueRangeFontSizeInput.value = String(Math.round(range.scale * 100));
+        updateStoryDialogueRangeFontSizeControls(dialogue);
+      });
+      item.append(text, size, remove);
+      dom.storyDialogueFontSizeRangeList.append(item);
+    });
+  }
+
   function renderStoryDialogueRubyRanges(dialogue) {
     dom.storyDialogueRubyList.replaceChildren();
     const characters = Array.from(dialogue.text || "");
@@ -5059,6 +5393,45 @@
     });
   }
 
+  function getStoryDialogueSelectionLabel(dialogue) {
+    if (!dialogue) {
+      return "尚未选择文字";
+    }
+    const selection = getStoryDialogueTextSelection();
+    if (selection.end <= selection.start) {
+      return "尚未选择文字";
+    }
+    const selectedText = Array.from(dialogue.text || "").slice(selection.start, selection.end).join("");
+    return `已选择「${selectedText.length > 18 ? `${Array.from(selectedText).slice(0, 18).join("")}…` : selectedText}」`;
+  }
+
+  function setStoryDialogueStyleTab(tab) {
+    const allowedTabs = ["color", "font-size", "ruby"];
+    activeStoryDialogueStyleTab = allowedTabs.includes(tab) ? tab : "color";
+    if (!dom.storyDialogueStyleTabs || !dom.storyDialogueStyleTrack) {
+      return;
+    }
+    const tabIndex = allowedTabs.indexOf(activeStoryDialogueStyleTab);
+    dom.storyDialogueStyleTabs.querySelectorAll("[data-dialogue-style-tab]").forEach((button) => {
+      const active = button.dataset.dialogueStyleTab === activeStoryDialogueStyleTab;
+      button.classList.toggle("is-active", active);
+      button.setAttribute("aria-selected", String(active));
+      button.tabIndex = active ? 0 : -1;
+    });
+    dom.storyDialogueStyleTrack.style.transform = `translate3d(-${tabIndex * (100 / allowedTabs.length)}%, 0, 0)`;
+    dom.storyDialogueStyleTrack.querySelectorAll("[data-dialogue-style-panel]").forEach((panel) => {
+      const active = panel.dataset.dialogueStylePanel === activeStoryDialogueStyleTab;
+      panel.classList.toggle("is-active", active);
+      panel.setAttribute("aria-hidden", String(!active));
+    });
+  }
+
+  function updateStoryDialogueStyleSelection(dialogue) {
+    if (dom.storyDialogueStyleSelectionValue) {
+      dom.storyDialogueStyleSelectionValue.textContent = getStoryDialogueSelectionLabel(dialogue);
+    }
+  }
+
   function updateStoryDialogueColorControls(dialogue) {
     if (!dialogue || !dom.storyDialogueColorInput) {
       return;
@@ -5068,6 +5441,7 @@
     const characters = Array.from(dialogue.text || "");
     const hasSelection = selection.end > selection.start;
     const selectedText = characters.slice(selection.start, selection.end).join("");
+    updateStoryDialogueStyleSelection(dialogue);
     dom.storyDialogueColorSelectionValue.textContent = hasSelection
       ? `已选择「${selectedText.length > 18 ? `${Array.from(selectedText).slice(0, 18).join("")}…` : selectedText}」`
       : "尚未选择文字";
@@ -5075,7 +5449,34 @@
     dom.storyDialogueColorClearSelectionButton.disabled = !hasSelection;
     dom.storyDialogueColorResetButton.disabled = dialogue.textColorRanges.length === 0;
     renderStoryDialogueColorRanges(dialogue);
+    updateStoryDialogueRangeFontSizeControls(dialogue);
     updateStoryDialogueRubyControls(dialogue);
+  }
+
+  function updateStoryDialogueRangeFontSizeControls(dialogue) {
+    if (!dialogue || !dom.storyDialogueRangeFontSizeInput) {
+      return;
+    }
+    dialogue.textFontSizeRanges = normalizeStoryTextFontSizeRanges(dialogue.textFontSizeRanges, dialogue.text);
+    const selection = getStoryDialogueTextSelection();
+    const characters = Array.from(dialogue.text || "");
+    const hasSelection = selection.end > selection.start;
+    const selectedText = characters.slice(selection.start, selection.end).join("");
+    updateStoryDialogueStyleSelection(dialogue);
+    const selectedRange = dialogue.textFontSizeRanges.find((range) => (
+      range.start === selection.start && range.end === selection.end
+    ));
+    dom.storyDialogueFontSizeSelectionValue.textContent = hasSelection
+      ? `已选择「${selectedText.length > 18 ? `${Array.from(selectedText).slice(0, 18).join("")}…` : selectedText}」`
+      : "尚未选择文字";
+    dom.storyDialogueFontSizeApplyButton.disabled = !hasSelection;
+    dom.storyDialogueFontSizeClearSelectionButton.disabled = !hasSelection;
+    dom.storyDialogueFontSizeResetButton.disabled = dialogue.textFontSizeRanges.length === 0;
+    if (document.activeElement !== dom.storyDialogueRangeFontSizeInput) {
+      dom.storyDialogueRangeFontSizeInput.value = String(Math.round((selectedRange?.scale || 1) * 100));
+    }
+    dom.storyDialogueRangeFontSizeValue.textContent = `${Math.round(Number(dom.storyDialogueRangeFontSizeInput.value) || 100)}%`;
+    renderStoryDialogueFontSizeRanges(dialogue);
   }
 
   function updateStoryDialogueRubyControls(dialogue) {
@@ -5087,6 +5488,7 @@
     const characters = Array.from(dialogue.text || "");
     const hasSelection = selection.end > selection.start;
     const selectedText = characters.slice(selection.start, selection.end).join("");
+    updateStoryDialogueStyleSelection(dialogue);
     const selectedRange = dialogue.textRubyRanges.find((range) => (
       range.start === selection.start && range.end === selection.end
     ));
@@ -5244,6 +5646,67 @@
     renderStoryCanvas(scene, 1);
   }
 
+  function applyStoryDialogueTextFontSize(start, end, scale) {
+    const scene = getActiveStoryScene();
+    const dialogue = scene && getActiveStoryDialogue(scene);
+    if (!dialogue) {
+      return;
+    }
+    const textLength = Array.from(dialogue.text || "").length;
+    const safeStart = Math.max(0, Math.min(textLength, Math.floor(Number(start) || 0)));
+    const safeEnd = Math.max(safeStart, Math.min(textLength, Math.floor(Number(end) || 0)));
+    if (safeEnd <= safeStart) {
+      return;
+    }
+    const sizes = getStoryTextFontSizeMap(dialogue.textFontSizeRanges, textLength);
+    const normalizedScale = scale === null
+      ? null
+      : normalizeStoryTextFontScale(scale, STORY_DIALOGUE_RANGE_FONT_SCALE_DEFAULT);
+    sizes.fill(normalizedScale, safeStart, safeEnd);
+    dialogue.textFontSizeRanges = compactStoryTextFontSizeRanges(sizes);
+    updateStoryDialogueRangeFontSizeControls(dialogue);
+    saveStoryProject();
+    renderStoryDialogueList(scene);
+    renderStorySceneList();
+    renderStoryCanvas(scene, 1);
+  }
+
+  function applySelectedStoryDialogueFontSize() {
+    const selection = getStoryDialogueTextSelection();
+    if (selection.end <= selection.start) {
+      showToast("请先在对话内容中选择文字");
+      return;
+    }
+    applyStoryDialogueTextFontSize(
+      selection.start,
+      selection.end,
+      Number(dom.storyDialogueRangeFontSizeInput.value) / 100
+    );
+  }
+
+  function clearSelectedStoryDialogueFontSize() {
+    const selection = getStoryDialogueTextSelection();
+    if (selection.end <= selection.start) {
+      showToast("请先在对话内容中选择文字");
+      return;
+    }
+    applyStoryDialogueTextFontSize(selection.start, selection.end, null);
+  }
+
+  function resetStoryDialogueFontSize() {
+    const scene = getActiveStoryScene();
+    const dialogue = scene && getActiveStoryDialogue(scene);
+    if (!dialogue) {
+      return;
+    }
+    dialogue.textFontSizeRanges = [];
+    updateStoryDialogueRangeFontSizeControls(dialogue);
+    saveStoryProject();
+    renderStoryDialogueList(scene);
+    renderStorySceneList();
+    renderStoryCanvas(scene, 1);
+  }
+
   function chooseStoryResource(role) {
     if (role === "actor") {
       openStoryCharacterPicker("servant");
@@ -5310,14 +5773,15 @@
       return;
     }
     const picker = state.story.picker;
+    const sourceCharacterId = String(actor.sourceCharacterId || actor.assetId);
     picker.open = true;
     picker.mode = "dialogueVariant";
     picker.targetActorId = actor.assetId;
     picker.targetDialogueId = dialogue.id;
     picker.kind = actor.pickerKind || (actor.sourceKey === "storyFigure" ? "storyFigures" : "servant");
     picker.selectedCharacter = {
-      id: actor.assetId,
-      fileName: actor.assetId,
+      id: sourceCharacterId,
+      fileName: sourceCharacterId,
       name: actor.characterName || actor.sourceCharacterName || actor.label,
       originalName: actor.sourceCharacterName || actor.characterName,
       face: actor.url
@@ -5484,9 +5948,9 @@
     if (state.story.picker.mode === "dialogueVariant") {
       dom.storyPickerDescription.textContent = "选择一个立绘差分，仅应用到当前对话段。";
     } else if (step === "characters") {
-    dom.storyPickerDescription.textContent = state.story.picker.kind === "backgrounds"
-      ? "搜索或浏览剧情图片，点击即可将背景加入当前分镜。"
-      : "先搜索或浏览人物，再选择对应的整体立绘。";
+      dom.storyPickerDescription.textContent = state.story.picker.kind === "backgrounds"
+        ? "搜索或浏览剧情图片，点击即可将背景加入当前分镜。"
+        : "先搜索或浏览人物，再选择对应的整体立绘；同一角色可重复加入不同形态。";
     } else if (step === "sources") {
       dom.storyPickerDescription.textContent = "选择一个人物立绘图集，工具会自动提取其中的立绘差分。";
     } else {
@@ -6173,7 +6637,8 @@
     const sourceCharacterName = getStoryCharacterName(character, characterId);
     const selectedSource = state.story.picker.selectedSource;
     const actor = {
-      assetId: characterId,
+      assetId: createStoryActorInstanceId(scene),
+      sourceCharacterId: characterId,
       url: storyAssetUrl,
       sourceUrl: asset.sourceUrl || asset.url,
       sourceIndex: asset.sourceIndex,
@@ -6203,29 +6668,7 @@
       colorMode: "auto",
       entryAnimation: "cut"
     };
-    const existingIndex = scene.actors.findIndex((current) => current.assetId === actor.assetId);
-    if (existingIndex >= 0) {
-      const existingActor = scene.actors[existingIndex];
-      actor.scale = normalizeStoryActorTransform(existingActor.scale, 1, 0.5, 2);
-      actor.offsetX = normalizeStoryActorTransform(existingActor.offsetX, 0, -0.5, 0.5);
-      actor.offsetY = normalizeStoryActorTransform(existingActor.offsetY, 0, -0.5, 0.5);
-      actor.colorMode = normalizeStoryActorColorMode(existingActor);
-      actor.entryAnimation = normalizeStoryActorEntryAnimation(existingActor.entryAnimation);
-      if (existingActor.characterName && !isGeneratedStoryActorName(existingActor.characterName)) {
-        actor.characterName = existingActor.characterName;
-      }
-      scene.actors.splice(existingIndex, 1, actor);
-      getStoryDialogues(scene).forEach((item) => {
-        if (item.actorVariants) {
-          delete item.actorVariants[actor.assetId];
-        }
-        if (item.actorColorModes) {
-          delete item.actorColorModes[actor.assetId];
-        }
-      });
-    } else {
-      scene.actors.push(actor);
-    }
+    scene.actors.push(actor);
     state.story.uniformTransformSessionByScene.delete(scene.id);
     state.story.selectedActorByScene.set(scene.id, actor.assetId);
     scene.selectedActorId = actor.assetId;
@@ -6234,13 +6677,61 @@
     dialogue.speaker = actor.characterName;
     saveStoryProject();
     renderStoryEditor();
-    showToast(`已加入当前分镜人物 · ${character.name || character.fileName || characterId}`);
+    const sameCharacterCount = scene.actors.filter((item) => item.sourceCharacterId === characterId).length;
+    showToast(`已加入当前分镜人物 · ${character.name || character.fileName || characterId}${
+      sameCharacterCount > 1 ? ` · 同角色第 ${sameCharacterCount} 个形态` : ""
+    }`);
   }
 
   let storyRenderer = null;
 
   function getStoryFontSetting() {
     return readSetting("story-font-preview-v2", "font-fzzhengzhong");
+  }
+
+  function normalizeStoryDialogueFontScale(value) {
+    const numericValue = Number(value);
+    if (!Number.isFinite(numericValue)) {
+      return STORY_DIALOGUE_FONT_SCALE_DEFAULT;
+    }
+    return Math.max(
+      STORY_DIALOGUE_FONT_SCALE_MIN,
+      Math.min(STORY_DIALOGUE_FONT_SCALE_MAX, numericValue)
+    );
+  }
+
+  function getStoryDialogueFontScale() {
+    return normalizeStoryDialogueFontScale(
+      readSetting(STORY_DIALOGUE_FONT_SCALE_SETTING, STORY_DIALOGUE_FONT_SCALE_DEFAULT)
+    );
+  }
+
+  function updateStoryDialogueFontSizeControl() {
+    if (!dom.storyDialogueFontSizeInput) {
+      return;
+    }
+    const scale = getStoryDialogueFontScale();
+    const percentage = Math.round(scale * 100);
+    dom.storyDialogueFontSizeInput.value = String(percentage);
+    if (dom.storyDialogueFontSizeValue) {
+      dom.storyDialogueFontSizeValue.value = `${percentage}%`;
+      dom.storyDialogueFontSizeValue.textContent = `${percentage}%`;
+    }
+  }
+
+  function updateStoryDialogueFontSize() {
+    if (!dom.storyDialogueFontSizeInput) {
+      return;
+    }
+    const scale = normalizeStoryDialogueFontScale(
+      Number(dom.storyDialogueFontSizeInput.value) / 100
+    );
+    saveSetting(STORY_DIALOGUE_FONT_SCALE_SETTING, String(scale));
+    updateStoryDialogueFontSizeControl();
+    const scene = getActiveStoryScene();
+    if (scene) {
+      renderStoryCanvas(scene, 1);
+    }
   }
 
   function updateStoryFont() {
@@ -6277,6 +6768,7 @@
         canvas: dom.storyCanvas,
         imageCache: state.story.imageCache,
         getAspect: () => state.story.project.aspect,
+        getFontScale: getStoryDialogueFontScale,
         shouldRender: () => state.story.open
       });
       if (dom.storyFontSelect) {
@@ -6296,7 +6788,12 @@
       animateActors,
       actorAnimationProgress
     );
-    storyRenderer.render(renderScene, progress);
+    if (typeof storyRenderer.requestRender === "function") {
+      // Interactive edits are coalesced into one paint per animation frame.
+      storyRenderer.requestRender(renderScene, progress);
+    } else {
+      storyRenderer.render(renderScene, progress);
+    }
   }
 
   function playStoryScene() {
@@ -6315,22 +6812,21 @@
     const totalDuration = dialogues.reduce((total, dialogue) => total + dialogue.duration, 0);
     const startedAt = performance.now();
     let playbackDialogueId = null;
+    let playbackDialogueIndex = 0;
+    let playbackDialogueStart = 0;
     state.story.playbackEnd = startedAt + totalDuration * 1000;
     dom.storyPlayButton.textContent = "■";
     const frame = (now) => {
       const elapsed = Math.max(0, (now - startedAt) / 1000);
-      let dialogueIndex = dialogues.length - 1;
-      let dialogueStart = 0;
-      let cursor = 0;
-      for (let index = 0; index < dialogues.length; index += 1) {
-        const dialogueEnd = cursor + dialogues[index].duration;
-        if (elapsed < dialogueEnd || index === dialogues.length - 1) {
-          dialogueIndex = index;
-          dialogueStart = cursor;
-          break;
-        }
-        cursor = dialogueEnd;
+      while (
+        playbackDialogueIndex < dialogues.length - 1 &&
+        elapsed >= playbackDialogueStart + dialogues[playbackDialogueIndex].duration
+      ) {
+        playbackDialogueStart += dialogues[playbackDialogueIndex].duration;
+        playbackDialogueIndex += 1;
       }
+      const dialogueIndex = playbackDialogueIndex;
+      const dialogueStart = playbackDialogueStart;
       const dialogue = dialogues[dialogueIndex];
       const dialogueProgress = Math.min(1, Math.max(0, (elapsed - dialogueStart) / dialogue.duration));
       if (playbackDialogueId !== dialogue.id) {
@@ -6391,8 +6887,17 @@
   }
 
   function updateStoryExportProgress(value, text) {
+    const numericValue = Math.max(0, Math.min(1, Number(value) || 0));
+    const now = performance.now();
+    const lastPaint = Number(updateStoryExportProgress.lastPaintAt) || 0;
+    const lastValue = Number(updateStoryExportProgress.lastValue);
+    if (numericValue < 1 && now - lastPaint < 100 && Number.isFinite(lastValue) && Math.abs(numericValue - lastValue) < 0.02) {
+      return;
+    }
+    updateStoryExportProgress.lastPaintAt = now;
+    updateStoryExportProgress.lastValue = numericValue;
     dom.storyExportStatus.hidden = false;
-    dom.storyExportProgress.value = Math.max(0, Math.min(1, Number(value) || 0));
+    dom.storyExportProgress.value = numericValue;
     dom.storyExportStatusText.textContent = text;
   }
 
@@ -6440,6 +6945,18 @@
     ].filter(Boolean);
   }
 
+  function getStoryDialogueAssetUrls(scene, dialogue) {
+    if (!scene) {
+      return [];
+    }
+    return [
+      scene.background && scene.background.url,
+      ...(scene.actors || []).map((actor) => actor && actor.url),
+      ...Object.values(dialogue && dialogue.actorVariants || {})
+        .map((variant) => variant && variant.url)
+    ].filter(Boolean);
+  }
+
   function appendStoryOutputPart(parts, data, position) {
     const start = Math.max(0, Number(position) || 0);
     const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
@@ -6476,7 +6993,79 @@
     return blob;
   }
 
-  function createStoryOutputTarget(media, mimeType) {
+  function createStoryOutputTarget(media, mimeType, options = {}) {
+    const nativeFilename = String(options.nativeFilename || "").trim();
+    if (nativeFilename && isNativeDirectFileSaverAvailable() &&
+        typeof media.StreamTarget === "function" && typeof WritableStream === "function") {
+      let uri = null;
+      let pendingChunk = null;
+      let writeQueue = Promise.resolve();
+      const enqueueChunk = (bytes, complete) => {
+        // Build the Blob once, then split the resulting object. This matters
+        // for WebView Blob implementations that materialize/copy data during
+        // construction; no bridge call is ever allowed to exceed our limit.
+        const blob = bytes && typeof bytes.slice === "function" && getBlobLikeSize(bytes)
+          ? bytes
+          : new Blob([bytes], { type: mimeType });
+        const size = getBlobLikeSize(blob);
+        if (!size || typeof blob.slice !== "function") return writeQueue;
+        for (let offset = 0; offset < size; offset += NATIVE_SAVE_CHUNK_SIZE) {
+          const part = blob.slice(offset, Math.min(size, offset + NATIVE_SAVE_CHUNK_SIZE));
+          const partComplete = Boolean(complete && offset + getBlobLikeSize(part) >= size);
+          writeQueue = writeQueue.then(async () => {
+            const result = await window.Capacitor.nativePromise("DirectFileSaver", "saveToDownloads", {
+              filename: nativeFilename,
+              mimeType,
+              data: await blobToBase64(part),
+              uri,
+              append: Boolean(uri),
+              complete: partComplete
+            });
+            uri = result && result.uri ? result.uri : uri;
+            await new Promise((resolve) => setTimeout(resolve, 0));
+          });
+        }
+        return writeQueue;
+      };
+      const writable = new WritableStream({
+        async write(chunk) {
+          const source = await getWritableChunkBytes(chunk);
+          if (!source || !source.byteLength) {
+            return writeQueue;
+          }
+          for (let offset = 0; offset < source.byteLength; offset += NATIVE_SAVE_CHUNK_SIZE) {
+            const next = source.slice(offset, Math.min(source.byteLength, offset + NATIVE_SAVE_CHUNK_SIZE));
+            if (pendingChunk) {
+              enqueueChunk(pendingChunk, false);
+            }
+            pendingChunk = next;
+          }
+          return writeQueue;
+        },
+        close: () => {
+          if (pendingChunk) {
+            enqueueChunk(pendingChunk, true);
+            pendingChunk = null;
+          }
+          return writeQueue;
+        }
+      });
+      const target = new media.StreamTarget(writable, {
+        chunked: true,
+        chunkSize: NATIVE_SAVE_CHUNK_SIZE
+      });
+      return {
+        target,
+        flush: async () => {
+          await writeQueue;
+          if (!uri) {
+            throw new Error("视频文件未写入下载目录");
+          }
+          return { uri, filename: nativeFilename };
+        },
+        getBlob: () => null
+      };
+    }
     if (typeof media.StreamTarget !== "function" || typeof WritableStream !== "function") {
       const target = new media.BufferTarget();
       return {
@@ -6548,19 +7137,9 @@
         quantizer: 18
       }
     ];
-    const desktopProfiles = [
-      {
-        codec: "vp9",
-        audioCodec: "opus",
-        container: "webm",
-        formatLabel: "WebM",
-        extension: "webm",
-        mimeType: "video/webm",
-        bitrate: 24_000_000,
-        quantizer: 12
-      },
-      ...nativeProfiles
-    ];
+    // AVC is broadly hardware-accelerated on desktop and mobile. Try it first
+    // for batch exports; VP8/VP9 remain available when the device cannot use it.
+    const desktopProfiles = nativeProfiles;
     const candidates = isNativeApp() ? nativeProfiles : desktopProfiles;
     const supported = [];
 
@@ -6576,8 +7155,8 @@
           width,
           height,
           quality: videoQuality,
-          latencyMode: "quality",
-          hardwareAcceleration: "no-preference",
+          latencyMode: STORY_EXPORT_LATENCY_MODE,
+          hardwareAcceleration: STORY_EXPORT_HARDWARE_ACCELERATION,
           alpha: "discard"
         });
       } catch (_error) {
@@ -6711,48 +7290,121 @@
   }
 
   function getStoryTimelineSegments(project) {
-    return project.scenes.flatMap((scene) => getStoryDialogues(scene).map((dialogue, index) => ({
-      scene,
-      dialogue,
-      animateActors: index === 0,
-      duration: dialogue.duration
-    })));
+    let cursor = 0;
+    return project.scenes.flatMap((scene) => getStoryDialogues(scene).map((dialogue, index) => {
+      const duration = Math.max(0.001, Number(dialogue.duration) || 0.001);
+      const segment = {
+        scene,
+        dialogue,
+        animateActors: index === 0,
+        duration,
+        start: cursor,
+        end: cursor + duration
+      };
+      cursor += duration;
+      return segment;
+    }));
   }
 
-  function renderStoryTimelineFrame(renderer, segments, elapsed) {
-    let cursor = 0;
-    let active = segments[segments.length - 1];
-    for (let index = 0; index < segments.length; index += 1) {
-      const segment = segments[index];
-      if (elapsed < cursor + segment.duration || index === segments.length - 1) {
-        active = segment;
-        break;
-      }
-      cursor += segment.duration;
+  function findStoryTimelineSegment(segments, elapsed) {
+    if (!segments.length) {
+      return { segment: null, index: -1 };
     }
-    const segmentProgress = Math.min(1, Math.max(0, (elapsed - cursor) / active.duration));
-    const actorAnimationProgress = Math.min(1, Math.max(0, (elapsed - cursor) / STORY_ACTOR_ENTRY_DURATION));
+    const target = Math.max(0, Number(elapsed) || 0);
+    let low = 0;
+    let high = segments.length - 1;
+    while (low < high) {
+      const middle = Math.ceil((low + high) / 2);
+      if (target < segments[middle].end) {
+        high = middle - 1;
+      } else {
+        low = middle;
+      }
+    }
+    const index = target < segments[low].end ? low : Math.min(segments.length - 1, low + 1);
+    return { segment: segments[index], index };
+  }
+
+  function renderStoryTimelineFrame(renderer, segments, elapsed, renderState = null) {
+    const match = findStoryTimelineSegment(segments, elapsed);
+    if (!match.segment) {
+      return false;
+    }
+    const active = match.segment;
+    const segmentProgress = Math.min(1, Math.max(0, (elapsed - active.start) / active.duration));
+    const actorAnimationProgress = Math.min(1, Math.max(0, (elapsed - active.start) / STORY_ACTOR_ENTRY_DURATION));
+    // Most export frames are visually identical. Keep the existing canvas when
+    // neither typewriter text nor an actor entry animation is changing.
+    const visibleCharacterCount = active.dialogue.typewriter
+      ? Math.min(
+        Array.from(String(active.dialogue.text || "")).length,
+        Math.floor(Math.max(0, elapsed - active.start) * STORY_TYPEWRITER_CHARACTERS_PER_SECOND)
+      )
+      : -1;
+    const actorProgressKey = active.animateActors
+      ? Math.round(actorAnimationProgress * 1000)
+      : 1;
+    const renderKey = `${match.index}:${visibleCharacterCount}:${actorProgressKey}`;
+    if (renderState && renderState.key === renderKey) {
+      return false;
+    }
     renderer.render(createStoryRenderScene(
       active.scene,
       active.dialogue,
       active.animateActors,
       actorAnimationProgress
     ), segmentProgress);
+    if (renderState) {
+      renderState.key = renderKey;
+    }
+    return true;
   }
 
-  function waitForStoryVideoTimeline(renderer, project, totalDuration) {
+  async function preloadStoryTimelineSegment(renderer, activeSegment, loadedState) {
+    if (!activeSegment || activeSegment === loadedState.segment) {
+      return;
+    }
+    if (activeSegment.scene !== loadedState.scene && typeof renderer.clearImageCache === "function") {
+      renderer.clearImageCache();
+    }
+    const preloaded = await renderer.preload(
+      getStoryDialogueAssetUrls(activeSegment.scene, activeSegment.dialogue)
+    );
+    if (preloaded.some((entry) => entry.failed)) {
+      throw new Error("部分分镜图片加载失败，无法完整导出视频");
+    }
+    loadedState.scene = activeSegment.scene;
+    loadedState.segment = activeSegment;
+  }
+
+  function waitForStoryVideoTimeline(renderer, project, totalDuration, options = {}) {
     const segments = getStoryTimelineSegments(project);
     const startedAt = performance.now();
-    return new Promise((resolve) => {
-      const drawFrame = (now) => {
-        const elapsed = Math.min(totalDuration, Math.max(0, (now - startedAt) / 1000));
-        renderStoryTimelineFrame(renderer, segments, elapsed);
-        updateStoryExportProgress(elapsed / totalDuration, `正在导出视频 ${Math.round(elapsed / totalDuration * 100)}%`);
-        if (elapsed < totalDuration) {
-          state.story.videoExportFrame = requestAnimationFrame(drawFrame);
-        } else {
+    const loadedState = {
+      scene: options.initialSegment ? options.initialSegment.scene : null,
+      segment: options.initialSegment || null
+    };
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      const drawFrame = async (now) => {
+        if (settled) return;
+        try {
+          const elapsed = Math.min(totalDuration, Math.max(0, (now - startedAt) / 1000));
+          const activeSegment = findStoryTimelineSegment(segments, elapsed).segment;
+          await preloadStoryTimelineSegment(renderer, activeSegment, loadedState);
+          renderStoryTimelineFrame(renderer, segments, elapsed);
+          updateStoryExportProgress(elapsed / totalDuration, `正在导出视频 ${Math.round(elapsed / totalDuration * 100)}%`);
+          if (elapsed < totalDuration) {
+            state.story.videoExportFrame = requestAnimationFrame(drawFrame);
+          } else {
+            settled = true;
+            state.story.videoExportFrame = null;
+            resolve();
+          }
+        } catch (error) {
+          settled = true;
           state.story.videoExportFrame = null;
-          resolve();
+          reject(error);
         }
       };
       state.story.videoExportFrame = requestAnimationFrame(drawFrame);
@@ -6791,12 +7443,12 @@
     audioSource.close();
   }
 
-  async function encodeStoryWithWebCodecs(renderer, canvas, project, totalDuration, bgmBuffer, profile) {
+  async function encodeStoryWithWebCodecs(renderer, canvas, project, totalDuration, bgmBuffer, profile, options = {}) {
     const media = await loadStoryMediaModule();
     const frameRate = 30;
     const frameDuration = 1 / frameRate;
     const totalFrames = Math.max(1, Math.ceil(totalDuration * frameRate));
-    const outputTarget = createStoryOutputTarget(media, profile.mimeType);
+    const outputTarget = createStoryOutputTarget(media, profile.mimeType, options);
     const target = outputTarget.target;
     const output = new media.Output({
       format: profile.container === "mp4"
@@ -6808,9 +7460,9 @@
     const videoSource = new media.CanvasSource(canvas, {
       codec: profile.codec,
       quality: profile.videoQuality,
-      keyFrameInterval: 2,
-      latencyMode: "quality",
-      hardwareAcceleration: "no-preference",
+      keyFrameInterval: STORY_EXPORT_KEYFRAME_INTERVAL,
+      latencyMode: STORY_EXPORT_LATENCY_MODE,
+      hardwareAcceleration: STORY_EXPORT_HARDWARE_ACCELERATION,
       contentHint: "detail",
       alpha: "discard",
       onEncoderConfig: (config) => {
@@ -6839,38 +7491,71 @@
       await output.start();
       const segments = getStoryTimelineSegments(project);
       let loadedScene = null;
+      let loadedSegment = null;
+      const renderState = { key: null };
       const encodeVideo = async () => {
-        for (let frameIndex = 0; frameIndex < totalFrames; frameIndex += 1) {
-          const timestamp = frameIndex * frameDuration;
-          const duration = Math.min(frameDuration, Math.max(0.000001, totalDuration - timestamp));
-          let cursor = 0;
-          let activeSegment = segments[segments.length - 1];
-          for (let segmentIndex = 0; segmentIndex < segments.length; segmentIndex += 1) {
-            const candidate = segments[segmentIndex];
-            if (timestamp < cursor + candidate.duration || segmentIndex === segments.length - 1) {
-              activeSegment = candidate;
-              break;
-            }
-            cursor += candidate.duration;
+        let timestamp = 0;
+        let frameIndex = 0;
+        let previousScene = null;
+        while (timestamp < totalDuration - 0.000001) {
+          const activeSegment = findStoryTimelineSegment(segments, timestamp).segment;
+          if (!activeSegment) {
+            break;
           }
-          if (activeSegment.scene !== loadedScene) {
-            if (loadedScene && typeof renderer.clearImageCache === "function") {
+          if (activeSegment !== loadedSegment) {
+            if (activeSegment.scene !== loadedScene && typeof renderer.clearImageCache === "function") {
               renderer.clearImageCache();
             }
-            const preloaded = await renderer.preload(getStorySceneAssetUrls(activeSegment.scene));
+            const preloaded = await renderer.preload(
+              getStoryDialogueAssetUrls(activeSegment.scene, activeSegment.dialogue)
+            );
             if (preloaded.some((entry) => entry.failed)) {
               throw new Error("部分分镜图片加载失败，无法完整导出视频");
             }
             loadedScene = activeSegment.scene;
+            loadedSegment = activeSegment;
           }
-          renderStoryTimelineFrame(renderer, segments, timestamp);
-          await videoSource.add(timestamp, duration);
-          if (frameIndex % 5 === 0 || frameIndex === totalFrames - 1) {
-            const progress = (frameIndex + 1) / totalFrames;
+          renderStoryTimelineFrame(renderer, segments, timestamp, renderState);
+          const segmentElapsed = Math.max(0, timestamp - activeSegment.start);
+          const segmentDuration = Math.max(0.000001, activeSegment.duration);
+          const textLength = activeSegment.dialogue.typewriter
+            ? Array.from(String(activeSegment.dialogue.text || "")).length
+            : 0;
+          const visibleCharacters = activeSegment.dialogue.typewriter
+            ? Math.min(textLength, Math.floor(segmentElapsed * STORY_TYPEWRITER_CHARACTERS_PER_SECOND))
+            : textLength;
+          const actorAnimating = activeSegment.animateActors &&
+            segmentElapsed < STORY_ACTOR_ENTRY_DURATION;
+          const typewriterAnimating = activeSegment.dialogue.typewriter && visibleCharacters < textLength &&
+            segmentElapsed < segmentDuration;
+          // A static dialogue can be represented by one long-duration frame.
+          // This avoids encoding 30 identical frames per second while keeping
+          // the exact timeline and output frame rate metadata.
+          const duration = actorAnimating || typewriterAnimating
+            ? Math.min(
+              frameDuration,
+              Math.max(0.000001, activeSegment.end - timestamp),
+              Math.max(0.000001, totalDuration - timestamp)
+            )
+            : Math.min(
+              Math.max(0.000001, activeSegment.end - timestamp),
+              Math.max(0.000001, totalDuration - timestamp)
+            );
+          const forceKeyFrame = activeSegment.scene !== previousScene;
+          await videoSource.add(timestamp, duration, forceKeyFrame ? { keyFrame: true } : undefined);
+          previousScene = activeSegment.scene;
+          timestamp += duration;
+          frameIndex += 1;
+          if (frameIndex % 5 === 0 || timestamp >= totalDuration - 0.000001) {
+            const progress = Math.min(1, timestamp / Math.max(0.000001, totalDuration));
             updateStoryExportProgress(progress * 0.96, `正在编码视频 ${Math.round(progress * 100)}%`);
           }
-          if (frameIndex > 0 && frameIndex % 15 === 0) {
-            await new Promise((resolve) => requestAnimationFrame(resolve));
+          // Avoid waiting for a display refresh during a batch export. A short
+          // timer still yields to WebView/Chrome so long exports do not starve
+          // native bridge work or progress updates, without adding ~16 ms per
+          // 15 frames as requestAnimationFrame did.
+          if (frameIndex > 0 && frameIndex % STORY_EXPORT_YIELD_INTERVAL === 0) {
+            await new Promise((resolve) => setTimeout(resolve, 0));
           }
         }
         videoSource.close();
@@ -6887,12 +7572,14 @@
       }
       throw error;
     }
-    const blob = outputTarget.getBlob();
-    if (!blob || !blob.size) {
+    const nativeFile = typeof outputTarget.flush === "function" ? await outputTarget.flush() : null;
+    const blob = nativeFile ? null : outputTarget.getBlob();
+    if (!nativeFile && (!blob || !blob.size)) {
       throw new Error("视频编码器未生成有效数据");
     }
     return {
       blob,
+      nativeFile,
       info: {
         encoder: "webcodecs",
         codec: profile.codec,
@@ -6946,7 +7633,11 @@
       exportRenderer = window.FgoStoryRenderer.createRenderer({
         canvas: exportCanvas,
         imageCache: new Map(),
+        // Keep only the assets needed by the current dialogue. This prevents
+        // dozens of expression images from remaining decoded in WebView RAM.
+        maxImageCacheEntries: 8,
         getAspect: () => project.aspect,
+        getFontScale: getStoryDialogueFontScale,
         getSize: () => project.aspect === "9:16"
           ? { width: 1080, height: 1920 }
           : { width: 1920, height: 1080 },
@@ -6980,6 +7671,9 @@
         }
       }
       const useWebCodecs = webCodecsProfiles.length > 0;
+      if (typeof exportRenderer.setImageCacheLimit === "function") {
+        exportRenderer.setImageCacheLimit(useWebCodecs ? 12 : 8);
+      }
       const mimeType = useWebCodecs ? null : getStoryVideoMimeType();
       if (!useWebCodecs && (!mimeType || typeof HTMLCanvasElement.prototype.captureStream !== "function")) {
         throw new Error(isNativeApp()
@@ -6989,15 +7683,9 @@
           : "当前浏览器不支持视频导出，请使用最新版 Chrome 或 Edge");
       }
       exportStage = setStoryExportStage("image-preload");
-      if (!useWebCodecs) {
-        updateStoryExportProgress(0, "正在预加载背景与人物图片");
-        const preloaded = await exportRenderer.preload(getStoryAssetUrls(project));
-        if (preloaded.some((entry) => entry.failed)) {
-          throw new Error("部分图片资源加载失败，无法完整导出视频");
-        }
-      } else {
-        updateStoryExportProgress(0, "将按分镜加载图片，降低内存占用");
-      }
+      updateStoryExportProgress(0, useWebCodecs
+        ? "将按分镜加载图片，降低内存占用"
+        : "将按对话加载图片，降低内存占用");
       if (useWebCodecs) {
         let bgmBuffer = null;
         if (project.bgm && project.bgm.url) {
@@ -7022,7 +7710,8 @@
               project,
               totalDuration,
               bgmBuffer,
-              profile
+              profile,
+              { nativeFilename: `${sanitizeFilename(project.title || "story")}.${profile.extension}` }
             );
             break;
           } catch (error) {
@@ -7050,6 +7739,11 @@
         dom.storyExportStatus.dataset.bitrateMode = String(result.info.bitrateMode || "");
         updateStoryExportProgress(0.99, "正在保存视频文件");
         exportStage = setStoryExportStage("saving");
+        if (result.nativeFile) {
+          updateStoryExportProgress(1, "视频已导出");
+          showToast("视频已导出到下载目录");
+          return;
+        }
         const filename = `${sanitizeFilename(project.title || "未命名剧情")}.${result.info.extension}`;
         await saveBlob(result.blob, filename, "保存剧情视频");
         updateStoryExportProgress(1, "视频已导出");
@@ -7068,6 +7762,12 @@
       }
       const firstScene = project.scenes[0];
       const firstDialogue = getStoryDialogues(firstScene)[0];
+      const fallbackSegments = getStoryTimelineSegments(project);
+      const initialSegment = fallbackSegments[0];
+      const initialLoadedState = { scene: null, segment: null };
+      await preloadStoryTimelineSegment(exportRenderer, initialSegment, initialLoadedState);
+      const fallbackFilename = `${sanitizeFilename(project.title || "story")}.${getStoryVideoExtension(mimeType)}`;
+      const nativeVideoWriter = createNativeVideoChunkWriter(fallbackFilename, mimeType);
       exportRenderer.render(createStoryRenderScene(firstScene, firstDialogue, false), 0);
       canvasStream = exportCanvas.captureStream(30);
       const tracks = [...canvasStream.getVideoTracks()];
@@ -7083,7 +7783,11 @@
       });
       recorder.addEventListener("dataavailable", (event) => {
         if (event.data && event.data.size) {
-          chunks.push(event.data);
+          if (nativeVideoWriter) {
+            nativeVideoWriter.append(event.data);
+          } else {
+            chunks.push(event.data);
+          }
         }
       });
       const stopped = new Promise((resolve, reject) => {
@@ -7094,9 +7798,21 @@
       if (exportAudio) {
         exportAudio.source.start();
       }
-      await waitForStoryVideoTimeline(exportRenderer, project, totalDuration);
+      await waitForStoryVideoTimeline(exportRenderer, project, totalDuration, {
+        initialSegment
+      });
       recorder.stop();
       await stopped;
+      if (nativeVideoWriter) {
+        await nativeVideoWriter.close();
+        /*
+        updateStoryExportProgress(1, "视频已导出");
+        showToast("视频已导出到下载目录");
+        */
+        updateStoryExportProgress(1, "视频已导出");
+        showToast("视频已导出到下载目录");
+        return;
+      }
       if (!chunks.length) {
         throw new Error("浏览器未生成有效的视频数据");
       }
@@ -7446,7 +8162,7 @@
       }
     );
     const blob = await createStoredZip(entries, () => {});
-    await saveBlob(blob, `${sanitizeFilename(project.title || "未命名剧情")}.rusu`, "备份剧情工程");
+    await saveBlob(blob, `${sanitizeFilename(project.title || "未命名剧情")}.zip`, "备份剧情工程");
     updateStoryProjectSaveStatus("已自动保存到本机", "saved");
     const backupMessage = `剧情备份已生成${assetManifest.length ? `，包含 ${assetManifest.length} 个本地素材` : ""}`;
     showToast(isNativeDirectFileSaverAvailable() ? `${backupMessage}，已保存到下载/如数迦贞` : backupMessage);
@@ -7608,6 +8324,16 @@
   }
 
   function bindEvents() {
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden" && pendingStoryProjectSave) {
+        flushStoryProjectSave().catch(() => {});
+      }
+    });
+    window.addEventListener("pagehide", () => {
+      if (pendingStoryProjectSave) {
+        flushStoryProjectSave().catch(() => {});
+      }
+    });
     window.addEventListener("resize", scheduleViewportUpdate);
     window.addEventListener("orientationchange", scheduleViewportUpdate);
     if (window.visualViewport) {
@@ -7663,6 +8389,10 @@
     dom.storyAddDialogueButton.addEventListener("click", addStoryDialogue);
     dom.storyAspectSelect.addEventListener("change", updateStoryAspect);
     dom.storyFontSelect.addEventListener("change", updateStoryFont);
+    dom.storyDialogueFontSizeInput.addEventListener("input", updateStoryDialogueFontSize);
+    dom.storyDialogueRangeFontSizeInput.addEventListener("input", () => {
+      dom.storyDialogueRangeFontSizeValue.textContent = `${Math.round(Number(dom.storyDialogueRangeFontSizeInput.value) || 100)}%`;
+    });
     dom.storyProjectName.addEventListener("input", () => {
       state.story.project.title = dom.storyProjectName.value.slice(0, 80) || "未命名剧情";
       saveStoryProject();
@@ -7685,10 +8415,17 @@
         updateStoryDialogueRubyControls(dialogue);
       }
     });
+    dom.storyDialogueStyleTabs.querySelectorAll("[data-dialogue-style-tab]").forEach((button) => {
+      button.addEventListener("click", () => setStoryDialogueStyleTab(button.dataset.dialogueStyleTab));
+    });
+    setStoryDialogueStyleTab(activeStoryDialogueStyleTab);
     dom.storyDurationInput.addEventListener("input", () => updateStorySceneField("duration", dom.storyDurationInput.value));
     dom.storyDialogueColorApplyButton.addEventListener("click", applySelectedStoryDialogueColor);
     dom.storyDialogueColorClearSelectionButton.addEventListener("click", clearSelectedStoryDialogueColor);
     dom.storyDialogueColorResetButton.addEventListener("click", resetStoryDialogueColor);
+    dom.storyDialogueFontSizeApplyButton.addEventListener("click", applySelectedStoryDialogueFontSize);
+    dom.storyDialogueFontSizeClearSelectionButton.addEventListener("click", clearSelectedStoryDialogueFontSize);
+    dom.storyDialogueFontSizeResetButton.addEventListener("click", resetStoryDialogueFontSize);
     dom.storyDialogueRubyApplyButton.addEventListener("click", applySelectedStoryDialogueRuby);
     dom.storyDialogueRubyClearSelectionButton.addEventListener("click", clearSelectedStoryDialogueRuby);
     dom.storyDialogueRubyResetButton.addEventListener("click", resetStoryDialogueRuby);
