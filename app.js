@@ -192,6 +192,9 @@
     storyResourceStoryFilter: document.getElementById("storyResourceStoryFilter"),
     storyResourceSourceSelect: document.getElementById("storyResourceSourceSelect"),
     storyResourceStorySelect: document.getElementById("storyResourceStorySelect"),
+    storyResourceBrowser: document.getElementById("storyResourceBrowser"),
+    storyResourceBrowserStatus: document.getElementById("storyResourceBrowserStatus"),
+    storyResourceSourceRail: document.getElementById("storyResourceSourceRail"),
     sortSelect: document.getElementById("sortSelect"),
     newOnlyInput: document.getElementById("newOnlyInput"),
     newToggleLabel: document.getElementById("newToggleLabel"),
@@ -851,6 +854,7 @@
     dom.gallery.classList.toggle("is-background-library", config.kind === "backgrounds");
     dom.gallery.classList.toggle("is-story-figure-library", config.kind === "storyFigures");
     dom.gallery.classList.toggle("is-bgm-library", config.kind === "bgm");
+    dom.storyResourceBrowser.hidden = !(config.kind === "backgrounds" || config.kind === "storyFigures");
     dom.subtypeLabel.textContent = config.subtypeLabel;
     dom.raritySelect.closest(".select-control").hidden = Boolean(config.staticAsset);
     dom.sortSelect.querySelector('option[value="rarity"]').hidden = Boolean(config.staticAsset);
@@ -916,8 +920,9 @@
       (Array.isArray(item.storySources) ? item.storySources : []).forEach((source) => {
         const id = String(source.id ?? "");
         if (!id) return;
-        const current = sources.get(id) || { id, name: String(source.name || `剧情 ${id}`), category: source.category || "other", count: 0 };
+        const current = sources.get(id) || { id, name: String(source.name || `剧情 ${id}`), category: source.category || "other", count: 0, icon: source.icon || source.banner || source.headerImage || "" };
         current.count += 1;
+        if (!current.icon) current.icon = source.icon || source.banner || source.headerImage || "";
         sources.set(id, current);
       });
     });
@@ -934,6 +939,49 @@
     dom.storyResourceStorySelect.replaceChildren(new Option("全部具体剧情", "all"));
     visibleSources.forEach((source) => dom.storyResourceStorySelect.add(new Option(`${source.name} (${countFormatter.format(source.count)})`, source.id)));
     dom.storyResourceStorySelect.value = state.storyResourceSourceId;
+    renderStoryResourceSourceRail(visibleSources);
+  }
+
+  function renderStoryResourceSourceRail(sources) {
+    if (!dom.storyResourceSourceRail) return;
+    dom.storyResourceSourceRail.replaceChildren();
+    const all = { id: "all", name: "全部剧情", category: "all", count: state.items.length };
+    const entries = [all, ...(Array.isArray(sources) ? sources.slice(0, 48) : [])];
+    entries.forEach((source) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "story-resource-source-card";
+      button.setAttribute("role", "option");
+      button.setAttribute("aria-selected", String(source.id === state.storyResourceSourceId));
+      button.dataset.sourceId = source.id;
+      const icon = document.createElement("span");
+      icon.className = "story-resource-source-card-icon";
+      if (source.icon) {
+        const image = document.createElement("img");
+        image.alt = "";
+        image.loading = "lazy";
+        image.src = source.icon;
+        icon.append(image);
+      } else {
+        icon.textContent = source.category === "event" ? "E" : source.category === "main" ? "M" : source.category === "interlude" ? "I" : "A";
+      }
+      const name = document.createElement("strong");
+      name.textContent = source.name;
+      const count = document.createElement("small");
+      count.textContent = `${countFormatter.format(source.count)} 资源`;
+      button.append(icon, name, count);
+      button.addEventListener("click", () => {
+        state.storyResourceSourceId = source.id;
+        dom.storyResourceStorySelect.value = source.id;
+        renderStoryResourceSourceRail(sources);
+        applyFilters();
+      });
+      dom.storyResourceSourceRail.append(button);
+    });
+    if (dom.storyResourceBrowserStatus) {
+      dom.storyResourceBrowserStatus.textContent = state.storyResourceSourceId === "all"
+        ? "选择剧情后浏览关联资源" : `当前剧情：${entries.find((item) => item.id === state.storyResourceSourceId)?.name || "已选择"}`;
+    }
   }
 
   function updateFilterIndicator() {
@@ -1046,6 +1094,17 @@
 
   function renderGallery() {
     dom.statePanel.hidden = true;
+    const isStoryResource = ["backgrounds", "storyFigures"].includes(LIBRARIES[state.library].kind);
+    const browsingAllStories = isStoryResource && dom.storyResourceStorySelect.value === "all" && !dom.searchInput.value;
+    dom.gallery.hidden = browsingAllStories;
+    if (browsingAllStories) {
+      dom.gallery.replaceChildren();
+      dom.resultCount.textContent = countFormatter.format(state.items.length);
+      dom.resultLabel.textContent = state.library === "backgrounds" ? "张背景" : "张立绘";
+      dom.loadSentinel.hidden = true;
+      return;
+    }
+    dom.gallery.hidden = false;
     dom.gallery.replaceChildren();
     dom.resultCount.textContent = countFormatter.format(state.filtered.length);
     dom.resultLabel.textContent = state.library === "equip"
@@ -8906,6 +8965,7 @@
     });
     dom.storyResourceStorySelect.addEventListener("change", () => {
       state.storyResourceSourceId = dom.storyResourceStorySelect.value;
+      populateStoryResourceFilters();
       applyFilters();
     });
     dom.sortSelect.addEventListener("change", applyFilters);
