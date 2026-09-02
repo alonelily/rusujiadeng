@@ -188,6 +188,10 @@
     raritySelect: document.getElementById("raritySelect"),
     subtypeSelect: document.getElementById("subtypeSelect"),
     subtypeLabel: document.getElementById("subtypeLabel"),
+    storyResourceSourceFilter: document.getElementById("storyResourceSourceFilter"),
+    storyResourceStoryFilter: document.getElementById("storyResourceStoryFilter"),
+    storyResourceSourceSelect: document.getElementById("storyResourceSourceSelect"),
+    storyResourceStorySelect: document.getElementById("storyResourceStorySelect"),
     sortSelect: document.getElementById("sortSelect"),
     newOnlyInput: document.getElementById("newOnlyInput"),
     newToggleLabel: document.getElementById("newToggleLabel"),
@@ -428,6 +432,8 @@
     newIds: new Set(),
     loading: false,
     density: "comfortable",
+    storyResourceSourceCategory: "all",
+    storyResourceSourceId: "all",
     dataInfo: null,
     lastModified: null,
     loadController: null,
@@ -848,6 +854,9 @@
     dom.subtypeLabel.textContent = config.subtypeLabel;
     dom.raritySelect.closest(".select-control").hidden = Boolean(config.staticAsset);
     dom.sortSelect.querySelector('option[value="rarity"]').hidden = Boolean(config.staticAsset);
+    const showStoryResourceFilters = config.kind === "backgrounds" || config.kind === "storyFigures";
+    dom.storyResourceSourceFilter.hidden = !showStoryResourceFilters;
+    dom.storyResourceStoryFilter.hidden = !showStoryResourceFilters;
     dom.mobileRegionSelect.value = state.region;
   }
 
@@ -883,6 +892,8 @@
     });
     dom.subtypeSelect.value = subtypeCounts.has(previousSubtype) ? previousSubtype : "all";
 
+    populateStoryResourceFilters();
+
     dom.newCount.textContent = countFormatter.format(state.newIds.size);
     dom.newOnlyInput.disabled = state.newIds.size === 0;
     dom.newToggleLabel.classList.toggle("is-disabled", state.newIds.size === 0);
@@ -892,11 +903,46 @@
     updateFilterIndicator();
   }
 
+  function populateStoryResourceFilters() {
+    const isStoryResource = ["backgrounds", "storyFigures"].includes(LIBRARIES[state.library].kind);
+    dom.storyResourceSourceFilter.hidden = !isStoryResource;
+    dom.storyResourceStoryFilter.hidden = !isStoryResource;
+    if (!isStoryResource) return;
+    const categories = new Map();
+    const sources = new Map();
+    state.items.forEach((item) => {
+      const itemCategories = Array.isArray(item.sourceCategories) && item.sourceCategories.length ? item.sourceCategories : ["unindexed"];
+      itemCategories.forEach((category) => categories.set(category, (categories.get(category) || 0) + 1));
+      (Array.isArray(item.storySources) ? item.storySources : []).forEach((source) => {
+        const id = String(source.id ?? "");
+        if (!id) return;
+        const current = sources.get(id) || { id, name: String(source.name || `剧情 ${id}`), category: source.category || "other", count: 0 };
+        current.count += 1;
+        sources.set(id, current);
+      });
+    });
+    state.storyResourceSourceCategory = categories.has(state.storyResourceSourceCategory) ? state.storyResourceSourceCategory : "all";
+    dom.storyResourceSourceSelect.replaceChildren(new Option("全部剧情类型", "all"));
+    Object.keys(STORY_SOURCE_CATEGORY_LABELS).forEach((key) => {
+      if (categories.has(key)) dom.storyResourceSourceSelect.add(new Option(`${STORY_SOURCE_CATEGORY_LABELS[key]} (${countFormatter.format(categories.get(key))})`, key));
+    });
+    dom.storyResourceSourceSelect.value = state.storyResourceSourceCategory;
+    const visibleSources = [...sources.values()]
+      .filter((source) => state.storyResourceSourceCategory === "all" || source.category === state.storyResourceSourceCategory)
+      .sort((left, right) => right.count - left.count || left.name.localeCompare(right.name, "zh-CN"));
+    state.storyResourceSourceId = visibleSources.some((source) => source.id === state.storyResourceSourceId) ? state.storyResourceSourceId : "all";
+    dom.storyResourceStorySelect.replaceChildren(new Option("全部具体剧情", "all"));
+    visibleSources.forEach((source) => dom.storyResourceStorySelect.add(new Option(`${source.name} (${countFormatter.format(source.count)})`, source.id)));
+    dom.storyResourceStorySelect.value = state.storyResourceSourceId;
+  }
+
   function updateFilterIndicator() {
     const activeCount = [
       Boolean(dom.searchInput.value),
       dom.raritySelect.value !== "all",
       dom.subtypeSelect.value !== "all",
+      dom.storyResourceSourceSelect.value !== "all",
+      dom.storyResourceStorySelect.value !== "all",
       dom.sortSelect.value !== "newest",
       dom.newOnlyInput.checked
     ].filter(Boolean).length;
@@ -938,6 +984,8 @@
     const query = normalizedText(dom.searchInput.value);
     const rarity = dom.raritySelect.value;
     const subtype = dom.subtypeSelect.value;
+    const sourceCategory = dom.storyResourceSourceSelect.value;
+    const sourceId = dom.storyResourceStorySelect.value;
     const config = LIBRARIES[state.library];
 
     state.filtered = state.items.filter((item) => {
@@ -946,6 +994,10 @@
       }
       if (subtype !== "all" && String(item[config.subtypeField] || "unknown") !== subtype) {
         return false;
+      }
+      if (["backgrounds", "storyFigures"].includes(config.kind)) {
+        if (sourceCategory !== "all" && !(item.sourceCategories || ["unindexed"]).includes(sourceCategory)) return false;
+        if (sourceId !== "all" && !(item.storySources || []).some((source) => String(source.id) === sourceId)) return false;
       }
       if (dom.newOnlyInput.checked && !state.newIds.has(item.id)) {
         return false;
@@ -1007,7 +1059,8 @@
     }
     if (!state.filtered.length) {
       const hasFilters = Boolean(dom.searchInput.value) || dom.raritySelect.value !== "all" ||
-        dom.subtypeSelect.value !== "all" || dom.newOnlyInput.checked;
+        dom.subtypeSelect.value !== "all" || dom.storyResourceSourceSelect.value !== "all" ||
+        dom.storyResourceStorySelect.value !== "all" || dom.newOnlyInput.checked;
       showState(
         hasFilters ? "没有匹配结果" : "暂无资源",
         hasFilters ? "调整搜索词或筛选条件后再试。" : "当前区域没有可显示的数据。",
@@ -1076,7 +1129,7 @@
     rarity.textContent = state.library === "servant"
       ? `${"★".repeat(Math.max(0, Math.min(5, item.rarity || 0)))} ${getSubtypeLabel(item.className || "unknown")}`
       : state.library === "backgrounds"
-        ? item.catalogMatched ? `${item.backgroundTypeLabel} · ${item.sourceSummary}` : item.backgroundTypeLabel
+        ? `${item.backgroundTypeLabel} · ${item.sourceSummary || "尚未建立剧情索引"}`
         : state.library === "storyFigures"
           ? item.catalogMatched ? `${item.figureTypeLabel} · ${item.sourceSummary}` : item.figureTypeLabel
           : "★".repeat(Math.max(0, Math.min(5, item.rarity || 0)));
@@ -8486,6 +8539,10 @@
     dom.clearSearchButton.hidden = true;
     dom.raritySelect.value = "all";
     dom.subtypeSelect.value = "all";
+    state.storyResourceSourceCategory = "all";
+    state.storyResourceSourceId = "all";
+    dom.storyResourceSourceSelect.value = "all";
+    dom.storyResourceStorySelect.value = "all";
     dom.sortSelect.value = "newest";
     dom.newOnlyInput.checked = false;
     dom.advancedFilters.classList.remove("is-open");
@@ -8841,6 +8898,16 @@
     });
     dom.raritySelect.addEventListener("change", applyFilters);
     dom.subtypeSelect.addEventListener("change", applyFilters);
+    dom.storyResourceSourceSelect.addEventListener("change", () => {
+      state.storyResourceSourceCategory = dom.storyResourceSourceSelect.value;
+      state.storyResourceSourceId = "all";
+      populateStoryResourceFilters();
+      applyFilters();
+    });
+    dom.storyResourceStorySelect.addEventListener("change", () => {
+      state.storyResourceSourceId = dom.storyResourceStorySelect.value;
+      applyFilters();
+    });
     dom.sortSelect.addEventListener("change", applyFilters);
     dom.newOnlyInput.addEventListener("change", applyFilters);
     dom.mobileFilterButton.addEventListener("click", () => {
