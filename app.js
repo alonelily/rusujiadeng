@@ -934,7 +934,7 @@
     dom.storyResourceSourceSelect.value = state.storyResourceSourceCategory;
     const visibleSources = [...sources.values()]
       .filter((source) => state.storyResourceSourceCategory === "all" || source.category === state.storyResourceSourceCategory)
-      .sort((left, right) => right.count - left.count || left.name.localeCompare(right.name, "zh-CN"));
+      .sort((left, right) => getStorySourceSortValue(right) - getStorySourceSortValue(left) || String(right.id).localeCompare(String(left.id)));
     state.storyResourceSourceId = visibleSources.some((source) => source.id === state.storyResourceSourceId) ? state.storyResourceSourceId : "all";
     dom.storyResourceStorySelect.replaceChildren(new Option("全部具体剧情", "all"));
     visibleSources.forEach((source) => dom.storyResourceStorySelect.add(new Option(`${source.name} (${countFormatter.format(source.count)})`, source.id)));
@@ -946,8 +946,9 @@
     if (!dom.storyResourceSourceRail) return;
     dom.storyResourceSourceRail.replaceChildren();
     const all = { id: "all", name: "全部剧情", category: "all", count: state.items.length };
-    const entries = [all, ...(Array.isArray(sources) ? sources.slice(0, 48) : [])];
-    entries.forEach((source) => {
+    const entries = [all, ...(Array.isArray(sources) ? sources : [])];
+    const selectedSource = entries.find((source) => source.id === state.storyResourceSourceId);
+    const renderCard = (source, parent = dom.storyResourceSourceRail) => {
       const button = document.createElement("button");
       button.type = "button";
       button.className = "story-resource-source-card";
@@ -976,12 +977,54 @@
         renderStoryResourceSourceRail(sources);
         applyFilters();
       });
-      dom.storyResourceSourceRail.append(button);
+      parent.append(button);
+    };
+    if (selectedSource && selectedSource.id !== "all") {
+      const selected = document.createElement("section");
+      selected.className = "story-resource-selected-source";
+      const back = document.createElement("button");
+      back.type = "button";
+      back.className = "secondary-button story-resource-source-back";
+      back.textContent = "返回剧情列表";
+      back.addEventListener("click", () => {
+        state.storyResourceSourceId = "all";
+        dom.storyResourceStorySelect.value = "all";
+        renderStoryResourceSourceRail(sources);
+        applyFilters();
+      });
+      const current = document.createElement("div");
+      current.className = "story-resource-selected-card";
+      renderCard(selectedSource, current);
+      selected.append(back, current);
+      dom.storyResourceSourceRail.append(selected);
+      if (dom.storyResourceBrowserStatus) dom.storyResourceBrowserStatus.textContent = `当前剧情：${selectedSource.name}`;
+      return;
+    }
+    const groups = new Map([["main", []], ["event", []], ["interlude", []], ["other", []], ["unindexed", []]]);
+    entries.slice(1).forEach((source) => groups.get(groups.has(source.category) ? source.category : "other").push(source));
+    const labels = { main: "主线剧情", event: "活动剧情", interlude: "幕间物语", other: "其他剧情", unindexed: "尚未识别" };
+    groups.forEach((group, category) => {
+      if (!group.length) return;
+      const section = document.createElement("section");
+      section.className = `story-resource-source-group source-group-${category}`;
+      const heading = document.createElement("h3");
+      heading.textContent = labels[category] || category;
+      const grid = document.createElement("div");
+      grid.className = "story-resource-source-grid";
+      group.forEach((source) => renderCard(source, grid));
+      section.append(heading, grid);
+      dom.storyResourceSourceRail.append(section);
     });
     if (dom.storyResourceBrowserStatus) {
       dom.storyResourceBrowserStatus.textContent = state.storyResourceSourceId === "all"
         ? "选择剧情后浏览关联资源" : `当前剧情：${entries.find((item) => item.id === state.storyResourceSourceId)?.name || "已选择"}`;
     }
+  }
+
+  function getStorySourceSortValue(source) {
+    const id = Number(source?.id);
+    if (!Number.isFinite(id)) return 0;
+    return id === 9999 ? -1 : id;
   }
 
   function updateFilterIndicator() {
