@@ -3,6 +3,7 @@
 
   const API_BASE = "https://api.atlasacademy.io";
   const STATIC_ASSET_BASE = "https://static.atlasacademy.io";
+  const STORY_RESOURCE_CATALOG_URL = "assets/data/story-resource-catalog.json";
   const PAGE_SIZE = 60;
   const STORY_FIGURE_PAGE_SIZE = 24;
   const REGIONS = ["JP", "NA", "CN", "KR", "TW"];
@@ -149,6 +150,14 @@
     form: "特殊形态"
   };
 
+  const STORY_SOURCE_CATEGORY_LABELS = {
+    main: "主线剧情",
+    event: "活动剧情",
+    interlude: "幕间物语",
+    other: "其他剧情",
+    unindexed: "尚未识别"
+  };
+
   const ASSET_GROUP_LABELS = {
     ascension: "灵基阶段",
     costume: "灵衣",
@@ -163,6 +172,8 @@
     sourceIntro: document.getElementById("sourceIntro"),
     enterAppButton: document.getElementById("enterAppButton"),
     enterStoryAppButton: document.getElementById("enterStoryAppButton"),
+    enterCraftEssenceButton: document.getElementById("enterCraftEssenceButton"),
+    enterServantCardButton: document.getElementById("enterServantCardButton"),
     introMoreButton: document.getElementById("introMoreButton"),
     homeButton: document.getElementById("homeButton"),
     gallery: document.getElementById("galleryGrid"),
@@ -193,6 +204,10 @@
     introSupportButton: document.getElementById("introSupportButton"),
     supportPanel: document.getElementById("supportPanel"),
     supportBackHomeButton: document.getElementById("supportBackHomeButton"),
+    craftEssencePanel: document.getElementById("craftEssencePanel"),
+    craftEssenceBackButton: document.getElementById("craftEssenceBackButton"),
+    servantCardPanel: document.getElementById("servantCardPanel"),
+    servantCardBackButton: document.getElementById("servantCardBackButton"),
     morePanel: document.getElementById("morePanel"),
     moreBackHomeButton: document.getElementById("moreBackHomeButton"),
     storyExportButton: document.getElementById("storyExportButton"),
@@ -326,8 +341,15 @@
     storyPickerImportButton: document.getElementById("storyPickerImportButton"),
     storyPickerImportInput: document.getElementById("storyPickerImportInput"),
     storyPickerFilters: document.getElementById("storyPickerFilters"),
+    storyPickerClassFilter: document.getElementById("storyPickerClassFilter"),
+    storyPickerRarityFilter: document.getElementById("storyPickerRarityFilter"),
+    storyPickerSourceFilter: document.getElementById("storyPickerSourceFilter"),
+    storyPickerStoryFilter: document.getElementById("storyPickerStoryFilter"),
     storyPickerClassSelect: document.getElementById("storyPickerClassSelect"),
     storyPickerRaritySelect: document.getElementById("storyPickerRaritySelect"),
+    storyPickerSourceSelect: document.getElementById("storyPickerSourceSelect"),
+    storyPickerStorySelect: document.getElementById("storyPickerStorySelect"),
+    storyPickerSourceCatalog: document.getElementById("storyPickerSourceCatalog"),
     storyPickerStatus: document.getElementById("storyPickerStatus"),
     storyPickerProgress: document.getElementById("storyPickerProgress"),
     storyPickerProgressTitle: document.getElementById("storyPickerProgressTitle"),
@@ -565,6 +587,13 @@
     return state.library === "storyFigures" ? STORY_FIGURE_PAGE_SIZE : PAGE_SIZE;
   }
 
+  function loadStoryResourceCatalog(region) {
+    if (!window.FgoStoryResourceCatalog) {
+      return Promise.resolve(null);
+    }
+    return window.FgoStoryResourceCatalog.load(STORY_RESOURCE_CATALOG_URL, region);
+  }
+
   async function loadLibrary(options) {
     const force = Boolean(options && options.force);
     if (state.loadController) {
@@ -584,6 +613,9 @@
     const currentLibrary = state.library;
     const config = LIBRARIES[currentLibrary];
     const exportUrl = `${API_BASE}/export/${currentRegion}/${config.exportFile}`;
+    const catalogPromise = config.kind === "storyFigures" || config.kind === "backgrounds"
+      ? loadStoryResourceCatalog(currentRegion)
+      : Promise.resolve(null);
 
     try {
       const infoPromise = fetch(`${API_BASE}/info`, {
@@ -602,7 +634,7 @@
 
       const lastModified = response.headers.get("Last-Modified");
       const items = await response.json();
-      const allInfo = await infoPromise;
+      const [allInfo, resourceCatalog] = await Promise.all([infoPromise, catalogPromise]);
 
       if (currentRegion !== state.region || currentLibrary !== state.library) {
         return;
@@ -613,7 +645,7 @@
       }
 
       const snapshot = readSnapshot();
-      state.items = normalizeLibraryItems(items, config, currentRegion);
+      state.items = normalizeLibraryItems(items, config, currentRegion, resourceCatalog);
       state.newIds = calculateNewIds(state.items, snapshot);
       state.dataInfo = allInfo && allInfo[currentRegion] ? allInfo[currentRegion] : null;
       state.lastModified = lastModified;
@@ -660,7 +692,7 @@
     }
   }
 
-  function normalizeLibraryItems(items, config, region) {
+  function normalizeLibraryItems(items, config, region, resourceCatalog = null) {
     if (config.kind === "bgm") {
       return items
         .filter((item) => item && (item.audioAsset || item.url || item.audioUrl || item.fileName))
@@ -700,11 +732,9 @@
           const formMatch = String(item.folder).match(/^CharaFigure\/Form\/(\d+)$/);
           const figureType = formMatch ? "form" : "standard";
           const formIndex = formMatch ? Number(formMatch[1]) : null;
-          return {
+          const normalized = {
             id: String(item.path),
-            name: formIndex
-              ? `人物立绘 ${fileName} · Form ${formIndex}`
-              : `人物立绘 ${fileName}`,
+            name: `未识别人物立绘 ${fileName}`,
             originalName: `${fileName}_merged.png`,
             fileName,
             path: item.path,
@@ -718,6 +748,9 @@
             size: item.size,
             crc32: item.crc32
           };
+          return window.FgoStoryResourceCatalog
+            ? window.FgoStoryResourceCatalog.enrichFigure(normalized, resourceCatalog)
+            : normalized;
         });
     }
 
@@ -733,9 +766,10 @@
           ? "fullScreen"
           : /^back\d+$/.test(fileName) ? "standard" : "variant";
         const path = item.path || `Back/${fileName}`;
-        return {
+        const normalized = {
           id: fileName,
           name: fileName.replace(/^back/, "背景 "),
+          fileName,
           originalName: fileName,
           face: `${STATIC_ASSET_BASE}/${region}/${path}.png`,
           collectionNo: extractAssetNumber(fileName),
@@ -746,6 +780,9 @@
           size: item.size,
           crc32: item.crc32
         };
+        return window.FgoStoryResourceCatalog
+          ? window.FgoStoryResourceCatalog.enrichBackground(normalized, resourceCatalog)
+          : normalized;
       });
   }
 
@@ -927,7 +964,11 @@
         item.path,
         item.figureTypeLabel,
         item.formIndex,
-        item.audioAsset
+        item.audioAsset,
+        item.catalogSearchText,
+        item.sourceSummary,
+        ...(item.aliases || []),
+        ...(item.storySources || []).map((source) => source.name)
       ].map(normalizedText).join(" ");
       return haystack.includes(query);
     });
@@ -1035,9 +1076,9 @@
     rarity.textContent = state.library === "servant"
       ? `${"★".repeat(Math.max(0, Math.min(5, item.rarity || 0)))} ${getSubtypeLabel(item.className || "unknown")}`
       : state.library === "backgrounds"
-        ? item.backgroundTypeLabel
+        ? item.catalogMatched ? `${item.backgroundTypeLabel} · ${item.sourceSummary}` : item.backgroundTypeLabel
         : state.library === "storyFigures"
-          ? item.figureTypeLabel
+          ? item.catalogMatched ? `${item.figureTypeLabel} · ${item.sourceSummary}` : item.figureTypeLabel
           : "★".repeat(Math.max(0, Math.min(5, item.rarity || 0)));
     const number = document.createElement("span");
     number.textContent = state.library === "storyFigures"
@@ -1210,7 +1251,7 @@
       : state.library === "backgrounds"
         ? `${item.backgroundTypeLabel} · ${formatFileSize(item.size)}`
         : state.library === "storyFigures"
-          ? `${item.figureTypeLabel}${item.formIndex ? ` · Form ${item.formIndex}` : ""}`
+          ? `${item.figureTypeLabel}${item.formIndex ? ` · Form ${item.formIndex}` : ""} · ${item.sourceSummary || "尚未建立剧情索引"}`
           : `${item.rarity || 0} 星 · ${getSubtypeLabel(item.className || "unknown")}`;
     dom.inspectorName.textContent = item.name || item.originalName || `ID ${item.id}`;
     dom.inspectorOriginalName.textContent = item.originalName && item.originalName !== item.name ? item.originalName : `ID ${item.id}`;
@@ -2925,6 +2966,8 @@
         kind: "servant",
         servantClass: "all",
         servantRarity: "all",
+        sourceCategory: "all",
+        sourceId: "all",
         targetActorId: null,
         targetDialogueId: null,
         items: [],
@@ -3665,6 +3708,18 @@
     const isOpen = Boolean(open);
     dom.supportPanel.hidden = !isOpen;
     document.querySelector(".app-shell").classList.toggle("is-support-open", isOpen);
+  }
+
+  function setCraftEssencePanelOpen(open) {
+    if (!window.FgoCraftEssenceEditor) return;
+    if (open) window.FgoCraftEssenceEditor.open();
+    else window.FgoCraftEssenceEditor.close();
+  }
+
+  function setServantCardPanelOpen(open) {
+    if (!window.FgoServantCardEditor) return;
+    if (open) window.FgoServantCardEditor.open();
+    else window.FgoServantCardEditor.close();
   }
 
   function openStoryAssetDatabase() {
@@ -5724,6 +5779,8 @@
     picker.kind = ["servant", "storyFigures", "backgrounds"].includes(kind) ? kind : "servant";
     picker.servantClass = "all";
     picker.servantRarity = "all";
+    picker.sourceCategory = "all";
+    picker.sourceId = "all";
     dom.storyCharacterPickerTitle.textContent = picker.kind === "backgrounds" ? "选择剧情图片" : "选择剧情人物";
     picker.selectedCharacter = null;
     picker.selectedSources = [];
@@ -5859,15 +5916,19 @@
           : state.story.picker.kind === "servant"
             ? `No.${item.collectionNo || "--"} · ${CLASS_LABELS[item.className] || item.className || "unknown"}`
           : state.story.picker.kind === "backgrounds"
-            ? `${item.backgroundTypeLabel || "剧情图片"} · ${formatFileSize(item.size)}`
-            : `ID ${item.fileName || item.id}`,
+            ? `${item.backgroundTypeLabel || "剧情图片"} · ${item.sourceSummary || "尚未建立剧情索引"}`
+            : `${item.sourceSummary || "尚未建立剧情索引"} · ID ${item.fileName || item.id}`,
         getSearchText: (item) => [
           item.name,
           item.originalName,
           item.id,
           item.fileName,
           item.collectionNo,
-          item.className
+          item.className,
+          item.catalogSearchText,
+          item.sourceSummary,
+          ...(item.aliases || []),
+          ...(item.storySources || []).flatMap((source) => [source.name, source.id])
         ].join(" "),
         onSelect: selectStoryPickerCharacter,
         onResults: (visibleCount, totalCount) => {
@@ -5969,7 +6030,7 @@
       tab.classList.toggle("is-active", active);
       tab.setAttribute("aria-selected", String(active));
     });
-    const showFilters = kind === "servant" && state.story.picker.mode !== "dialogueVariant";
+    const showFilters = state.story.picker.mode !== "dialogueVariant";
     dom.storyPickerFilters.hidden = !showFilters;
     const canImport = state.story.picker.mode !== "dialogueVariant";
     dom.storyPickerImportButton.hidden = !canImport;
@@ -5985,8 +6046,66 @@
 
   function updateStoryPickerFilters() {
     const picker = state.story.picker;
+    const canFilter = picker.mode !== "dialogueVariant";
     const isServant = picker.kind === "servant" && picker.mode !== "dialogueVariant";
-    dom.storyPickerFilters.hidden = !isServant;
+    const isStoryResource = ["storyFigures", "backgrounds"].includes(picker.kind) && canFilter;
+    dom.storyPickerFilters.hidden = !canFilter;
+    dom.storyPickerClassFilter.hidden = !isServant;
+    dom.storyPickerRarityFilter.hidden = !isServant;
+    dom.storyPickerSourceFilter.hidden = !isStoryResource;
+    dom.storyPickerStoryFilter.hidden = !isStoryResource;
+    if (dom.storyPickerStorySelect) dom.storyPickerStorySelect.disabled = !isStoryResource;
+    if (dom.storyPickerSourceCatalog) {
+      dom.storyPickerSourceCatalog.hidden = !isStoryResource;
+    }
+    if (isStoryResource) {
+      const counts = new Map();
+      const sources = new Map();
+      picker.items.forEach((item) => {
+        const categories = Array.isArray(item.sourceCategories) && item.sourceCategories.length
+          ? item.sourceCategories
+          : ["unindexed"];
+        categories.forEach((category) => counts.set(category, (counts.get(category) || 0) + 1));
+        (Array.isArray(item.storySources) ? item.storySources : []).forEach((source) => {
+          const id = String(source.id ?? "");
+          if (!id) return;
+          const current = sources.get(id) || {
+            id,
+            name: String(source.name || `剧情 ${id}`),
+            category: source.category || "other",
+            count: 0,
+            icon: source.icon || source.banner || source.headerImage || ""
+          };
+          current.count += 1;
+          if (!current.icon) current.icon = source.icon || source.banner || source.headerImage || "";
+          sources.set(id, current);
+        });
+      });
+      const previousCategory = picker.sourceCategory;
+      dom.storyPickerSourceSelect.replaceChildren(new Option("全部剧情来源", "all"));
+      Object.keys(STORY_SOURCE_CATEGORY_LABELS).forEach((category) => {
+        if (!counts.has(category)) return;
+        dom.storyPickerSourceSelect.add(new Option(
+          `${STORY_SOURCE_CATEGORY_LABELS[category]} (${countFormatter.format(counts.get(category))})`,
+          category
+        ));
+      });
+      picker.sourceCategory = counts.has(previousCategory) ? previousCategory : "all";
+      dom.storyPickerSourceSelect.value = picker.sourceCategory;
+      const sourceOptions = [...sources.values()]
+        .filter((source) => picker.sourceCategory === "all" || source.category === picker.sourceCategory)
+        .sort((left, right) => right.count - left.count || left.name.localeCompare(right.name, "ja"));
+      const previousSource = picker.sourceId;
+      dom.storyPickerStorySelect.replaceChildren(new Option("全部具体剧情", "all"));
+      sourceOptions.forEach((source) => {
+        const label = `${source.name} (${countFormatter.format(source.count)})`;
+        dom.storyPickerStorySelect.add(new Option(label, source.id));
+      });
+      picker.sourceId = sourceOptions.some((source) => source.id === previousSource) ? previousSource : "all";
+      dom.storyPickerStorySelect.value = picker.sourceId;
+      renderStoryPickerSourceCatalog(sourceOptions);
+      return;
+    }
     if (!isServant) {
       return;
     }
@@ -6008,6 +6127,55 @@
     picker.servantRarity = rarities.includes(Number(previousRarity)) ? previousRarity : "all";
     dom.storyPickerClassSelect.value = picker.servantClass;
     dom.storyPickerRaritySelect.value = String(picker.servantRarity);
+  }
+
+  function renderStoryPickerSourceCatalog(sources) {
+    const container = dom.storyPickerSourceCatalog;
+    if (!container) return;
+    container.replaceChildren();
+    const visibleSources = Array.isArray(sources) ? sources.slice(0, 36) : [];
+    if (!visibleSources.length) {
+      container.hidden = true;
+      return;
+    }
+    const fragment = document.createDocumentFragment();
+    visibleSources.forEach((source) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = `story-picker-source-chip source-${source.category || "other"}`;
+      button.dataset.sourceId = source.id;
+      button.title = `${source.name} · ${source.count} 项资源`;
+      const icon = document.createElement("span");
+      icon.className = "story-picker-source-chip-icon";
+      icon.setAttribute("aria-hidden", "true");
+      if (source.icon) {
+        const image = document.createElement("img");
+        image.alt = "";
+        image.loading = "lazy";
+        image.src = source.icon;
+        icon.append(image);
+      } else {
+        icon.textContent = source.category === "event" ? "E" : source.category === "main" ? "M" : source.category === "interlude" ? "I" : "?";
+      }
+      const label = document.createElement("span");
+      label.textContent = source.name;
+      const count = document.createElement("small");
+      count.textContent = countFormatter.format(source.count);
+      button.append(icon, label, count);
+      button.addEventListener("click", () => {
+        pickerSourceSelection(source.id);
+      });
+      fragment.append(button);
+    });
+    container.append(fragment);
+    container.hidden = false;
+  }
+
+  function pickerSourceSelection(sourceId) {
+    const picker = state.story.picker;
+    picker.sourceId = String(sourceId || "all");
+    if (dom.storyPickerStorySelect) dom.storyPickerStorySelect.value = picker.sourceId;
+    renderStoryPickerCharacters();
   }
 
   function createLocalStoryResourceId(prefix) {
@@ -6243,6 +6411,9 @@
     const config = kind === "servant"
       ? LIBRARIES.servant
       : kind === "backgrounds" ? LIBRARIES.backgrounds : LIBRARIES.storyFigures;
+    const catalogPromise = kind === "storyFigures" || kind === "backgrounds"
+      ? loadStoryResourceCatalog(state.region)
+      : Promise.resolve(null);
     dom.storyPickerStatus.textContent = `正在读取 ${getStoryPickerNoun(kind)}数据`;
     storyCharacterBrowser.showLoading(window.matchMedia("(max-width: 640px)").matches ? 8 : 12);
     let items;
@@ -6265,7 +6436,11 @@
     if (picker.kind !== kind) {
       return;
     }
-    const remoteItems = normalizeLibraryItems(items, config, state.region);
+    const resourceCatalog = await catalogPromise;
+    if (picker.kind !== kind) {
+      return;
+    }
+    const remoteItems = normalizeLibraryItems(items, config, state.region, resourceCatalog);
     picker.items = [...localItems, ...remoteItems];
     picker.cache.set(cacheKey, remoteItems);
     if (picker.loadController === controller) {
@@ -6283,8 +6458,13 @@
         (picker.servantClass === "all" || String(item.className || "") === picker.servantClass) &&
         (picker.servantRarity === "all" || String(item.rarity) === String(picker.servantRarity))
       ))
-      : picker.items;
-    picker.filteredItems = storyCharacterBrowser.setItems(filtered, dom.storyPickerSearchInput.value);
+      : picker.sourceCategory === "all"
+        ? picker.items
+        : picker.items.filter((item) => (item.sourceCategories || ["unindexed"]).includes(picker.sourceCategory));
+    const sourceFiltered = ["storyFigures", "backgrounds"].includes(picker.kind) && picker.sourceId !== "all"
+      ? filtered.filter((item) => (item.storySources || []).some((source) => String(source.id) === String(picker.sourceId)))
+      : filtered;
+    picker.filteredItems = storyCharacterBrowser.setItems(sourceFiltered, dom.storyPickerSearchInput.value);
   }
 
   async function selectStoryPickerCharacter(item) {
@@ -8352,9 +8532,13 @@
     dom.mobileRegionSelect.addEventListener("change", () => changeRegion(dom.mobileRegionSelect.value));
     dom.enterAppButton.addEventListener("click", enterApp);
     dom.enterStoryAppButton.addEventListener("click", enterStoryApp);
+    dom.enterCraftEssenceButton.addEventListener("click", enterCraftEssenceApp);
+    dom.enterServantCardButton.addEventListener("click", enterServantCardApp);
     dom.storyGeneratorBackButton.addEventListener("click", goHome);
     dom.introSupportButton.addEventListener("click", enterSupportApp);
     dom.supportBackHomeButton.addEventListener("click", goHome);
+    dom.craftEssenceBackButton.addEventListener("click", goHome);
+    dom.servantCardBackButton.addEventListener("click", goHome);
     dom.storyProjectLibraryButton.addEventListener("click", () => setStoryProjectLibraryOpen(true));
     dom.storyNewProjectButton.addEventListener("click", () => createNewStoryProject().catch(() => showToast("新建作品失败")));
     dom.storyBackupButton.addEventListener("click", () => exportStoryBackup().catch(() => showToast("剧情备份失败")));
@@ -8532,6 +8716,8 @@
       state.story.picker.kind = "servant";
       state.story.picker.servantClass = "all";
       state.story.picker.servantRarity = "all";
+      state.story.picker.sourceCategory = "all";
+      state.story.picker.sourceId = "all";
       cancelStoryPickerExtraction(state.story.picker);
       if (state.story.picker.detailController) {
         state.story.picker.detailController.abort();
@@ -8555,6 +8741,8 @@
       state.story.picker.kind = "storyFigures";
       state.story.picker.servantClass = "all";
       state.story.picker.servantRarity = "all";
+      state.story.picker.sourceCategory = "all";
+      state.story.picker.sourceId = "all";
       cancelStoryPickerExtraction(state.story.picker);
       if (state.story.picker.detailController) {
         state.story.picker.detailController.abort();
@@ -8583,6 +8771,8 @@
       state.story.picker.kind = "backgrounds";
       state.story.picker.servantClass = "all";
       state.story.picker.servantRarity = "all";
+      state.story.picker.sourceCategory = "all";
+      state.story.picker.sourceId = "all";
       state.story.picker.selectedCharacter = null;
       state.story.picker.selectedSources = [];
       state.story.picker.selectedSource = null;
@@ -8606,6 +8796,15 @@
     });
     dom.storyPickerRaritySelect.addEventListener("change", () => {
       state.story.picker.servantRarity = dom.storyPickerRaritySelect.value;
+      renderStoryPickerCharacters();
+    });
+    dom.storyPickerSourceSelect.addEventListener("change", () => {
+      state.story.picker.sourceCategory = dom.storyPickerSourceSelect.value;
+      state.story.picker.sourceId = "all";
+      renderStoryPickerCharacters();
+    });
+    dom.storyPickerStorySelect.addEventListener("change", () => {
+      state.story.picker.sourceId = dom.storyPickerStorySelect.value;
       renderStoryPickerCharacters();
     });
 
@@ -8775,6 +8974,8 @@
     setStoryGeneratorOpen(false);
     setMorePanelOpen(false);
     setSupportPanelOpen(false);
+    setCraftEssencePanelOpen(false);
+    setServantCardPanelOpen(false);
     showSourceIntro();
   }
 
@@ -8785,6 +8986,8 @@
     setStoryGeneratorOpen(false);
     setMorePanelOpen(false);
     setSupportPanelOpen(false);
+    setCraftEssencePanelOpen(false);
+    setServantCardPanelOpen(false);
     hideSourceIntro();
   }
 
@@ -8794,6 +8997,8 @@
     }
     setMorePanelOpen(false);
     setSupportPanelOpen(false);
+    setCraftEssencePanelOpen(false);
+    setServantCardPanelOpen(false);
     setStoryGeneratorOpen(true);
     hideSourceIntro();
   }
@@ -8804,6 +9009,8 @@
     }
     setStoryGeneratorOpen(false);
     setSupportPanelOpen(false);
+    setCraftEssencePanelOpen(false);
+    setServantCardPanelOpen(false);
     setMorePanelOpen(true);
     hideSourceIntro();
   }
@@ -8814,7 +9021,30 @@
     }
     setStoryGeneratorOpen(false);
     setMorePanelOpen(false);
+    setCraftEssencePanelOpen(false);
+    setServantCardPanelOpen(false);
     setSupportPanelOpen(true);
+    hideSourceIntro();
+  }
+
+  function enterCraftEssenceApp() {
+    if (dom.sourceIntro.hidden || dom.sourceIntro.classList.contains("is-leaving")) {
+      return;
+    }
+    setStoryGeneratorOpen(false);
+    setMorePanelOpen(false);
+    setSupportPanelOpen(false);
+    setCraftEssencePanelOpen(true);
+    hideSourceIntro();
+  }
+
+  function enterServantCardApp() {
+    if (dom.sourceIntro.hidden || dom.sourceIntro.classList.contains("is-leaving")) return;
+    setStoryGeneratorOpen(false);
+    setMorePanelOpen(false);
+    setSupportPanelOpen(false);
+    setCraftEssencePanelOpen(false);
+    setServantCardPanelOpen(true);
     hideSourceIntro();
   }
 

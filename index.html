@@ -12,7 +12,7 @@
       content="Atlas Academy FGO 礼装与从者立绘资源浏览器"
     />
     <title>如数迦贞</title>
-    <link rel="stylesheet" href="styles.css?v=20260829-dialogue-style-tabs-1" />
+    <link rel="stylesheet" href="styles.css?v=20260901-profile-editor-layout" />
   </head>
   <body class="is-intro-open">
     <section class="source-intro" id="sourceIntro" role="dialog" aria-modal="true" aria-labelledby="sourceIntroTitle">
@@ -80,6 +80,22 @@
             <span class="intro-window-caption">
               <strong>简易剧情生成</strong>
               <small>STORY BUILDER</small>
+              <span class="intro-window-arrow" aria-hidden="true">&#x2192;</span>
+            </span>
+          </button>
+          <button class="intro-window intro-window-craft-essence" id="enterCraftEssenceButton" type="button">
+            <span class="intro-window-image" aria-hidden="true"></span>
+            <span class="intro-window-caption">
+              <strong>自制礼装</strong>
+              <small>CRAFT ESSENCE</small>
+              <span class="intro-window-arrow" aria-hidden="true">&#x2192;</span>
+            </span>
+          </button>
+          <button class="intro-window intro-window-servant-card" id="enterServantCardButton" type="button">
+            <span class="intro-window-image" aria-hidden="true"></span>
+            <span class="intro-window-caption">
+              <strong>自制从者卡</strong>
+              <small>SERVANT CARD STUDIO</small>
               <span class="intro-window-arrow" aria-hidden="true">&#x2192;</span>
             </span>
           </button>
@@ -634,6 +650,248 @@
           </div>
         </section>
 
+        <section class="craft-essence-panel" id="craftEssencePanel" aria-labelledby="craftEssencePanelTitle" hidden>
+          <header class="craft-essence-header">
+            <div>
+              <span class="section-kicker">CRAFT ESSENCE STUDIO</span>
+              <h1 id="craftEssencePanelTitle">自制礼装</h1>
+              <p>替换礼装背景图，编辑礼装名称、ATK、HP 与说明文字，生成 1920 × 1080 PNG。</p>
+            </div>
+            <div class="craft-essence-header-actions">
+              <span class="craft-essence-status" id="craftEssenceStatus" aria-live="polite">正在读取礼装模板</span>
+              <button class="secondary-button" id="craftEssenceBackButton" type="button">返回主界面</button>
+              <button class="primary-button" id="craftEssenceExportButton" type="button">导出 PNG</button>
+            </div>
+          </header>
+          <div class="craft-essence-workspace">
+            <div class="craft-essence-preview-column">
+              <div class="craft-essence-preview-frame">
+                <canvas id="craftEssenceCanvas" width="1920" height="1080" aria-label="自制礼装预览" aria-busy="true"></canvas>
+              </div>
+              <p class="craft-essence-preview-note">预览与导出均保持模板原始比例和分辨率。</p>
+            </div>
+            <aside class="craft-essence-controls" aria-label="礼装编辑选项">
+              <section class="craft-essence-control-group">
+                <h2>礼装等级</h2>
+                <div class="craft-essence-segmented" role="group" aria-label="选择礼装星级">
+                  <button type="button" data-craft-essence-rarity data-rarity="4" class="is-active" aria-pressed="true">四星</button>
+                  <button type="button" data-craft-essence-rarity data-rarity="5" aria-pressed="false">五星</button>
+                </div>
+              </section>
+              <section class="craft-essence-control-group">
+                <h2>礼装背景图</h2>
+                <button class="secondary-button craft-essence-art-button" id="craftEssenceArtButton" type="button">选择图片</button>
+                <input id="craftEssenceArtInput" type="file" accept="image/png,image/jpeg,image/webp" hidden />
+                <span class="craft-essence-file-name" id="craftEssenceArtName">模板示例图</span>
+                <label class="craft-essence-range-field">
+                  <span>缩放 <output id="craftEssenceArtScaleValue" for="craftEssenceArtScale">100%</output></span>
+                  <input id="craftEssenceArtScale" type="range" min="100" max="220" step="1" value="100" />
+                </label>
+                <label class="craft-essence-range-field">
+                  <span>水平位置 <output id="craftEssenceArtXValue" for="craftEssenceArtX">0%</output></span>
+                  <input id="craftEssenceArtX" type="range" min="-100" max="100" step="1" value="0" />
+                </label>
+                <label class="craft-essence-range-field">
+                  <span>垂直位置 <output id="craftEssenceArtYValue" for="craftEssenceArtY">0%</output></span>
+                  <input id="craftEssenceArtY" type="range" min="-100" max="100" step="1" value="0" />
+                </label>
+                <button class="text-button" id="craftEssenceArtResetButton" type="button">恢复图片位置</button>
+              </section>
+              <section class="craft-essence-control-group">
+                <h2>文字内容</h2>
+                <label class="craft-essence-field">
+                  <span>礼装名称</span>
+                  <input id="craftEssenceNameInput" type="text" maxlength="30" value="那时那日所见风景" />
+                </label>
+                <div class="craft-essence-value-grid">
+                  <label class="craft-essence-field">
+                    <span>ATK 值</span>
+                    <input id="craftEssenceAtkInput" type="number" min="0" max="9999" step="1" value="100" />
+                  </label>
+                  <label class="craft-essence-field">
+                    <span>HP 值</span>
+                    <input id="craftEssenceHpInput" type="number" min="0" max="9999" step="1" value="100" />
+                  </label>
+                </div>
+                <label class="craft-essence-field">
+                  <span>上栏描述</span>
+                  <input id="craftEssenceUpperText" type="text" maxlength="40" value="coolkid凯" />
+                </label>
+                <label class="craft-essence-field">
+                  <span>下栏描述</span>
+                  <textarea id="craftEssenceLowerText" rows="8" maxlength="500">“好久没来姥爷家了，
+一下车，眼前的景象一股月球风”
+
+原先的荒草地变得绿意丛生、大片大片的野花生机盎然。
+望着这样的景象，也望着守护人理的你，他露出了愉快
+中带着些怀念的笑容。
+
+那是未曾成为英雄前的，平凡的日常和小小的过往。</textarea>
+                </label>
+              </section>
+              <button class="text-button" id="craftEssenceResetButton" type="button">恢复模板示例</button>
+            </aside>
+          </div>
+        </section>
+
+        <section class="servant-card-panel" id="servantCardPanel" aria-labelledby="servantCardPanelTitle" hidden>
+          <header class="servant-card-header">
+            <div>
+              <span class="section-kicker">SERVANT CARD STUDIO</span>
+              <h1 id="servantCardPanelTitle">自制从者卡</h1>
+              <p>编辑从者立绘、职阶、数值、技能图标、指令卡与资料，支持单页或整套导出。</p>
+            </div>
+            <div class="servant-card-header-actions">
+              <span class="servant-card-status" id="servantCardStatus" aria-live="polite">正在读取从者卡模板</span>
+              <button class="secondary-button" id="servantCardBackButton" type="button">返回主界面</button>
+              <button class="secondary-button" id="servantCardExportAllButton" type="button">导出整套 ZIP</button>
+              <button class="primary-button" id="servantCardExportButton" type="button">导出当前页</button>
+            </div>
+          </header>
+          <div class="servant-card-workspace">
+            <div class="servant-card-preview-column">
+              <div class="servant-card-preview-frame">
+                <canvas id="servantCardCanvas" width="1920" height="1080" aria-label="自制从者卡预览" aria-busy="true"></canvas>
+              </div>
+              <p class="servant-card-preview-note">左侧卡面固定；右侧长页保持原始比例，导出当前 1920 × 1080 视窗。</p>
+            </div>
+            <aside class="servant-card-controls" aria-label="从者卡编辑选项">
+              <div class="servant-card-page-tabs" role="group" aria-label="选择预览页面">
+                <button type="button" data-servant-card-page="ability" class="is-active" aria-pressed="true">能力页</button>
+                <button type="button" data-servant-card-page="profile" aria-pressed="false">资料页</button>
+              </div>
+              <label class="servant-card-range servant-card-page-position">
+                <span>右侧内容位置 <output id="servantCardPageOffsetValue">顶部</output></span>
+                <input id="servantCardPageOffset" type="range" min="0" max="0" step="1" value="0" />
+              </label>
+              <p class="servant-card-page-position-note">右侧长页按原始比例拼接；预览与导出均只保留当前 1920 × 1080 视窗。</p>
+              <div class="servant-card-control-tabs" id="servantCardAbilityTabs" role="tablist" aria-label="能力页编辑分类">
+                <button type="button" data-servant-card-control-tab="basic" role="tab" aria-selected="true">基础资料</button>
+                <button type="button" data-servant-card-control-tab="activeSkills" role="tab" aria-selected="false">持有技能</button>
+                <button type="button" data-servant-card-control-tab="classSkills" role="tab" aria-selected="false">职介技能</button>
+                <button type="button" data-servant-card-control-tab="appendSkills" role="tab" aria-selected="false">追加技能</button>
+                <button type="button" data-servant-card-control-tab="commandCards" role="tab" aria-selected="false">指令卡</button>
+                <button type="button" data-servant-card-control-tab="nobleCard" role="tab" aria-selected="false">宝具卡</button>
+              </div>
+              <section class="servant-card-control-panel" data-servant-card-control-panel="basic">
+                <h2>基础资料</h2>
+                <label class="servant-card-field"><span>从者名称</span><input id="servantCardName" type="text" maxlength="24" value="阿卡多" /></label>
+                <label class="servant-card-field"><span>右上称号</span><input id="servantCardTitle" type="text" maxlength="24" value="身披角色者" /></label>
+                <label class="servant-card-field"><span>从者职阶</span><select id="servantCardClass">
+                  <option value="saber">Saber</option><option value="archer">Archer</option><option value="lancer">Lancer</option><option value="rider">Rider</option><option value="caster">Caster</option><option value="assassin">Assassin</option><option value="berserker">Berserker</option><option value="ruler">Ruler</option><option value="avenger">Avenger</option><option value="alterEgo">Alter Ego</option><option value="moonCancer">Moon Cancer</option><option value="foreigner">Foreigner</option><option value="pretender" selected>Pretender</option><option value="shielder">Shielder</option><option value="beast">Beast</option>
+                </select></label>
+                <label class="servant-card-field"><span>从者星级</span><select id="servantCardRarity">
+                  <option value="3">3 星 · 银</option><option value="4">4 星 · 金</option><option value="5" selected>5 星 · 金</option>
+                </select></label>
+                <div class="servant-card-value-grid">
+                  <label class="servant-card-field"><span>ATK</span><input id="servantCardAtk" type="number" min="0" max="99999" value="12499" /></label>
+                  <label class="servant-card-field"><span>HP</span><input id="servantCardHp" type="number" min="0" max="99999" value="14770" /></label>
+                </div>
+                <button class="secondary-button" id="servantCardArtButton" type="button">选择从者立绘</button>
+                <input id="servantCardArtInput" type="file" accept="image/png,image/jpeg,image/webp" hidden />
+                <span class="servant-card-file-name" id="servantCardArtName">PSD 模板示例</span>
+                <label class="servant-card-range"><span>立绘缩放 <output id="servantCardArtScaleValue">100%</output></span><input id="servantCardArtScale" type="range" min="70" max="180" value="100" /></label>
+                <label class="servant-card-range"><span>水平位置 <output id="servantCardArtXValue">0%</output></span><input id="servantCardArtX" type="range" min="-100" max="100" value="0" /></label>
+                <label class="servant-card-range"><span>垂直位置 <output id="servantCardArtYValue">0%</output></span><input id="servantCardArtY" type="range" min="-100" max="100" value="0" /></label>
+                <button class="text-button" id="servantCardArtReset" type="button">恢复立绘位置</button>
+                <h2>能力页立绘</h2>
+                <button class="secondary-button" id="servantCardAbilityArtButton" type="button">选择能力页立绘</button>
+                <input id="servantCardAbilityArtInput" type="file" accept="image/png,image/jpeg,image/webp" hidden />
+                <span class="servant-card-file-name" id="servantCardAbilityArtName">默认使用 PSD 原始立绘</span>
+                <label class="servant-card-range"><span>能力页缩放 <output id="servantCardAbilityArtScaleValue">100%</output></span><input id="servantCardAbilityArtScale" type="range" min="60" max="180" value="100" /></label>
+                <label class="servant-card-range"><span>能力页水平位置 <output id="servantCardAbilityArtXValue">0%</output></span><input id="servantCardAbilityArtX" type="range" min="-100" max="100" value="0" /></label>
+                <label class="servant-card-range"><span>能力页垂直位置 <output id="servantCardAbilityArtYValue">0%</output></span><input id="servantCardAbilityArtY" type="range" min="-100" max="100" value="0" /></label>
+                <button class="text-button" id="servantCardAbilityArtReset" type="button">恢复能力页立绘位置</button>
+              </section>
+              <section class="servant-card-control-panel" data-servant-card-control-panel="activeSkills" hidden>
+                <h2>持有技能</h2>
+                <div class="servant-card-skill-list">
+                  <div class="servant-card-skill-row"><img data-servant-skill-thumb data-skill-group="active" data-skill-index="0" src="assets/servant-card/sample-skill-1.png" alt="" /><div><label class="servant-card-field"><span>技能 1 名称</span><input data-servant-skill-name data-skill-group="active" data-skill-index="0" type="text" value="暗夜之王 等级10" /></label><label class="servant-card-field"><span>技能说明</span><textarea data-servant-skill-detail data-skill-group="active" data-skill-index="0" rows="2">自身的攻击力提升(3回合)＆暴击威力提升(3回合)</textarea></label><div class="servant-card-inline-actions"><button class="secondary-button" type="button" data-servant-skill-search data-skill-group="active" data-skill-index="0">API 搜索图标</button><button class="text-button" type="button" data-servant-skill-import data-skill-group="active" data-skill-index="0">导入图标</button></div><input data-servant-skill-input data-skill-group="active" data-skill-index="0" type="file" accept="image/png,image/jpeg,image/webp" hidden /></div></div>
+                  <div class="servant-card-skill-row"><img data-servant-skill-thumb data-skill-group="active" data-skill-index="1" src="assets/servant-card/sample-skill-2.png" alt="" /><div><label class="servant-card-field"><span>技能 2 名称</span><input data-servant-skill-name data-skill-group="active" data-skill-index="1" type="text" value="弃名之物 等级10" /></label><label class="servant-card-field"><span>技能说明</span><textarea data-servant-skill-detail data-skill-group="active" data-skill-index="1" rows="2">自身的宝具值增加＆获得暴击星</textarea></label><div class="servant-card-inline-actions"><button class="secondary-button" type="button" data-servant-skill-search data-skill-group="active" data-skill-index="1">API 搜索图标</button><button class="text-button" type="button" data-servant-skill-import data-skill-group="active" data-skill-index="1">导入图标</button></div><input data-servant-skill-input data-skill-group="active" data-skill-index="1" type="file" accept="image/png,image/jpeg,image/webp" hidden /></div></div>
+                  <div class="servant-card-skill-row"><img data-servant-skill-thumb data-skill-group="active" data-skill-index="2" src="assets/servant-card/sample-skill-3.png" alt="" /><div><label class="servant-card-field"><span>技能 3 名称</span><input data-servant-skill-name data-skill-group="active" data-skill-index="2" type="text" value="箱中之猫 等级10" /></label><label class="servant-card-field"><span>技能说明</span><textarea data-servant-skill-detail data-skill-group="active" data-skill-index="2" rows="2">付与自身回避状态＆弱化耐性提升</textarea></label><div class="servant-card-inline-actions"><button class="secondary-button" type="button" data-servant-skill-search data-skill-group="active" data-skill-index="2">API 搜索图标</button><button class="text-button" type="button" data-servant-skill-import data-skill-group="active" data-skill-index="2">导入图标</button></div><input data-servant-skill-input data-skill-group="active" data-skill-index="2" type="file" accept="image/png,image/jpeg,image/webp" hidden /></div></div>
+                </div>
+              </section>
+              <section class="servant-card-control-panel" data-servant-card-control-panel="classSkills" hidden>
+                <h2>职介技能</h2>
+                <div class="servant-card-skill-list">
+                  <div class="servant-card-skill-row"><img data-servant-skill-thumb data-skill-group="class" data-skill-index="0" src="assets/servant-card/sample-skill-1.png" alt="" /><div><label class="servant-card-field"><span>职介技能 1 名称</span><input data-servant-skill-name data-skill-group="class" data-skill-index="0" type="text" value="狂化 EX" /></label><label class="servant-card-field"><span>技能说明</span><textarea data-servant-skill-detail data-skill-group="class" data-skill-index="0" rows="2">自身的Buster指令卡性能提升</textarea></label><div class="servant-card-inline-actions"><button class="secondary-button" type="button" data-servant-skill-search data-skill-group="class" data-skill-index="0">API 搜索图标</button><button class="text-button" type="button" data-servant-skill-import data-skill-group="class" data-skill-index="0">导入图标</button></div><input data-servant-skill-input data-skill-group="class" data-skill-index="0" type="file" accept="image/png,image/jpeg,image/webp" hidden /></div></div>
+                  <div class="servant-card-skill-row"><img data-servant-skill-thumb data-skill-group="class" data-skill-index="1" src="assets/servant-card/sample-skill-2.png" alt="" /><div><label class="servant-card-field"><span>职介技能 2 名称</span><input data-servant-skill-name data-skill-group="class" data-skill-index="1" type="text" value="单独显现 EX" /></label><label class="servant-card-field"><span>技能说明</span><textarea data-servant-skill-detail data-skill-group="class" data-skill-index="1" rows="2">自身的暴击威力提升＆即死耐性提升＆精神异常耐性提升</textarea></label><div class="servant-card-inline-actions"><button class="secondary-button" type="button" data-servant-skill-search data-skill-group="class" data-skill-index="1">API 搜索图标</button><button class="text-button" type="button" data-servant-skill-import data-skill-group="class" data-skill-index="1">导入图标</button></div><input data-servant-skill-input data-skill-group="class" data-skill-index="1" type="file" accept="image/png,image/jpeg,image/webp" hidden /></div></div>
+                  <div class="servant-card-skill-row"><img data-servant-skill-thumb data-skill-group="class" data-skill-index="2" src="assets/servant-card/sample-skill-3.png" alt="" /><div><label class="servant-card-field"><span>职介技能 3 名称</span><input data-servant-skill-name data-skill-group="class" data-skill-index="2" type="text" value="异界来者 EX" /></label><label class="servant-card-field"><span>技能说明</span><textarea data-servant-skill-detail data-skill-group="class" data-skill-index="2" rows="2">赋予自身每回合获得2个暴击星的状态＆弱化耐性提升</textarea></label><div class="servant-card-inline-actions"><button class="secondary-button" type="button" data-servant-skill-search data-skill-group="class" data-skill-index="2">API 搜索图标</button><button class="text-button" type="button" data-servant-skill-import data-skill-group="class" data-skill-index="2">导入图标</button></div><input data-servant-skill-input data-skill-group="class" data-skill-index="2" type="file" accept="image/png,image/jpeg,image/webp" hidden /></div></div>
+                </div>
+              </section>
+              <section class="servant-card-control-panel" data-servant-card-control-panel="appendSkills" hidden>
+                <h2>追加技能</h2>
+                <div class="servant-card-skill-list">
+                  <div class="servant-card-skill-row"><img data-servant-skill-thumb data-skill-group="append" data-skill-index="0" src="assets/servant-card/sample-skill-1.png" alt="" /><div><label class="servant-card-field"><span>追加技能 1 名称</span><input data-servant-skill-name data-skill-group="append" data-skill-index="0" type="text" value="追击技巧提升 等级10" /></label><label class="servant-card-field"><span>技能说明</span><textarea data-servant-skill-detail data-skill-group="append" data-skill-index="0" rows="2">自身的Extra指令卡性能提升50%[等级10]</textarea></label><div class="servant-card-inline-actions"><button class="secondary-button" type="button" data-servant-skill-search data-skill-group="append" data-skill-index="0">API 搜索图标</button><button class="text-button" type="button" data-servant-skill-import data-skill-group="append" data-skill-index="0">导入图标</button></div><input data-servant-skill-input data-skill-group="append" data-skill-index="0" type="file" accept="image/png,image/jpeg,image/webp" hidden /></div></div>
+                  <div class="servant-card-skill-row"><img data-servant-skill-thumb data-skill-group="append" data-skill-index="1" src="assets/servant-card/sample-skill-2.png" alt="" /><div><label class="servant-card-field"><span>追加技能 2 名称</span><input data-servant-skill-name data-skill-group="append" data-skill-index="1" type="text" value="魔力装填 等级10" /></label><label class="servant-card-field"><span>技能说明</span><textarea data-servant-skill-detail data-skill-group="append" data-skill-index="1" rows="2">自身以宝具已达20%的状态开始战斗</textarea></label><div class="servant-card-inline-actions"><button class="secondary-button" type="button" data-servant-skill-search data-skill-group="append" data-skill-index="1">API 搜索图标</button><button class="text-button" type="button" data-servant-skill-import data-skill-group="append" data-skill-index="1">导入图标</button></div><input data-servant-skill-input data-skill-group="append" data-skill-index="1" type="file" accept="image/png,image/jpeg,image/webp" hidden /></div></div>
+                  <div class="servant-card-skill-row"><img data-servant-skill-thumb data-skill-group="append" data-skill-index="2" src="assets/servant-card/sample-skill-3.png" alt="" /><div><label class="servant-card-field"><span>追加技能 3 名称</span><input data-servant-skill-name data-skill-group="append" data-skill-index="2" type="text" value="对剑士攻击适性 等级10" /></label><label class="servant-card-field"><span>技能说明</span><textarea data-servant-skill-detail data-skill-group="append" data-skill-index="2" rows="2">自身对[剑士]职介的攻击力提升30%[等级10]</textarea></label><div class="servant-card-inline-actions"><button class="secondary-button" type="button" data-servant-skill-search data-skill-group="append" data-skill-index="2">API 搜索图标</button><button class="text-button" type="button" data-servant-skill-import data-skill-group="append" data-skill-index="2">导入图标</button></div><input data-servant-skill-input data-skill-group="append" data-skill-index="2" type="file" accept="image/png,image/jpeg,image/webp" hidden /></div></div>
+                </div>
+              </section>
+              <section class="servant-card-control-panel" data-servant-card-control-panel="commandCards" hidden>
+                <h2>指令卡图案</h2>
+                <button class="secondary-button" id="servantCommandArtButton" type="button">导入指令卡立绘</button>
+                <input id="servantCommandArtInput" type="file" accept="image/png,image/jpeg,image/webp" hidden />
+                <span class="servant-card-file-name" id="servantCommandArtName">默认使用 PSD 原始立绘</span>
+                <div class="servant-card-command-grid"><label class="servant-card-field"><span>卡 1</span><select data-servant-command-type><option selected>Quick</option><option>Arts</option><option>Buster</option></select></label><label class="servant-card-field"><span>卡 2</span><select data-servant-command-type><option>Quick</option><option selected>Arts</option><option>Buster</option></select></label><label class="servant-card-field"><span>卡 3</span><select data-servant-command-type><option>Quick</option><option>Arts</option><option selected>Buster</option></select></label><label class="servant-card-field"><span>卡 4</span><select data-servant-command-type><option>Quick</option><option>Arts</option><option selected>Buster</option></select></label><label class="servant-card-field"><span>卡 5</span><select data-servant-command-type><option>Quick</option><option>Arts</option><option selected>Buster</option></select></label></div>
+              </section>
+              <section class="servant-card-control-panel" data-servant-card-control-panel="nobleCard" hidden>
+                <h2>宝具卡</h2>
+                <label class="servant-card-field"><span>宝具名称</span><input id="servantNobleCardName" type="text" maxlength="30" value="拟似·死之河" /></label>
+                <label class="servant-card-field"><span>上方副标题</span><input id="servantNobleCardSubtitle" type="text" maxlength="40" value="Bird of Hermes" /></label>
+                <label class="servant-card-field"><span>宝具色卡</span><select id="servantNobleCardType"><option value="Quick">Quick · 绿卡</option><option value="Arts">Arts · 蓝卡</option><option value="Buster" selected>Buster · 红卡</option></select></label>
+                <div class="servant-card-value-grid">
+                  <label class="servant-card-field"><span>阶级</span><input id="servantNobleRank" type="text" maxlength="12" value="A" /></label>
+                  <label class="servant-card-field"><span>种类</span><input id="servantNobleType" type="text" maxlength="20" value="对军宝具" /></label>
+                </div>
+                <label class="servant-card-field"><span>宝具描述</span><textarea id="servantNobleDetail" rows="4" maxlength="240">对敌方全体发动自身生命值越少威力越高的强大的攻击&lt;过量充能时威力提升&gt;＆暴击威力提升[等级5](3回合)</textarea></label>
+                <button class="secondary-button" id="servantNobleArtButton" type="button">导入宝具卡立绘</button>
+                <input id="servantNobleArtInput" type="file" accept="image/png,image/jpeg,image/webp" hidden />
+                <span class="servant-card-file-name" id="servantNobleArtName">默认使用 PSD 原始立绘</span>
+              </section>
+              <section class="servant-card-control-panel" data-servant-card-control-panel="profile" hidden>
+                <label class="servant-card-field servant-card-profile-picker">
+                  <span>当前资料页</span>
+                  <select id="servantCardProfileSectionSelect" aria-label="选择要编辑的资料页">
+                    <option value="credits">画师·声优</option>
+                    <option value="details" selected>角色详情</option>
+                    <option value="profile1">个人资料 1</option>
+                    <option value="profile2">个人资料 2</option>
+                    <option value="profile3">个人资料 3</option>
+                    <option value="profile4">个人资料 4</option>
+                    <option value="profile5">个人资料 5</option>
+                    <option value="profile6">个人资料 6</option>
+                  </select>
+                </label>
+                <label class="servant-card-field servant-card-profile-text"><span class="sr-only" id="servantCardProfileSectionLabel">角色详情内容</span><textarea id="servantCardProfile" rows="12" aria-labelledby="servantCardProfileSectionLabel">从异界降临于此的临时协力者。并非魔术师，却拥有超越常识的战斗能力。
+
+其行动准则看似随性，实则始终守护着某个未曾说出口的约定。
+
+在迦勒底的记录中，他被归入特殊职阶，并以独立灵基维持现界。</textarea></label>
+                <div class="servant-card-profile-stat-panel">
+                  <h3 class="servant-card-subheading">参数等级</h3>
+                  <div class="servant-card-profile-stats">
+                    <label class="servant-card-field"><span>筋力</span><select data-servant-profile-stat="strength"><option>EX</option><option>A+</option><option selected>A</option><option>B</option><option>C</option><option>D</option><option>E</option><option>-</option></select></label>
+                    <label class="servant-card-field"><span>耐久</span><select data-servant-profile-stat="endurance"><option>EX</option><option>A+</option><option selected>A</option><option>B</option><option>C</option><option>D</option><option>E</option><option>-</option></select></label>
+                    <label class="servant-card-field"><span>敏捷</span><select data-servant-profile-stat="agility"><option>EX</option><option>A+</option><option>A</option><option selected>B</option><option>C</option><option>D</option><option>E</option><option>-</option></select></label>
+                    <label class="servant-card-field"><span>魔力</span><select data-servant-profile-stat="magic"><option>EX</option><option>A+</option><option selected>A</option><option>B</option><option>C</option><option>D</option><option>E</option><option>-</option></select></label>
+                    <label class="servant-card-field"><span>幸运</span><select data-servant-profile-stat="luck"><option>EX</option><option>A+</option><option>A</option><option>B</option><option>C</option><option>D</option><option selected>E</option><option>-</option></select></label>
+                    <label class="servant-card-field"><span>宝具</span><select data-servant-profile-stat="noble"><option>EX</option><option>A+</option><option selected>A</option><option>B</option><option>C</option><option>D</option><option>E</option><option>-</option></select></label>
+                  </div>
+                </div>
+              </section>
+              <button class="text-button" id="servantCardResetButton" type="button">恢复 PSD 模板示例</button>
+            </aside>
+          </div>
+          <div class="servant-skill-search" id="servantSkillSearchPanel" hidden>
+            <div class="servant-skill-search-backdrop" data-servant-skill-search-close></div>
+            <section class="servant-skill-search-dialog" role="dialog" aria-modal="true" aria-labelledby="servantSkillSearchTitle">
+              <header><div><span class="section-kicker">ATLAS ACADEMY API</span><h2 id="servantSkillSearchTitle">选择技能图标</h2><p id="servantSkillSearchTarget">正在选择技能图标</p></div><button class="icon-button" id="servantSkillSearchClose" type="button" aria-label="关闭">×</button></header>
+              <div class="servant-skill-search-bar"><input id="servantSkillSearchInput" type="search" placeholder="筛选技能名称，例如 カリスマ" /><button class="primary-button" id="servantSkillSearchButton" type="button">在线搜索</button></div>
+              <div class="servant-skill-search-results" id="servantSkillSearchResults"><p class="servant-card-search-empty">正在加载技能图标目录...</p></div>
+            </section>
+          </div>
+        </section>
+
         <section class="more-panel" id="morePanel" aria-labelledby="morePanelTitle" hidden>
           <div class="more-panel-art" role="img" aria-label="更多功能待开发"></div>
           <div class="more-panel-content">
@@ -696,22 +954,35 @@
             <button class="secondary-button story-picker-import-button" id="storyPickerImportButton" type="button">导入本地图片</button>
             <input id="storyPickerImportInput" type="file" accept="image/*" multiple hidden />
             <div class="story-picker-filters" id="storyPickerFilters" hidden>
-              <label class="story-picker-filter">
+              <label class="story-picker-filter" id="storyPickerClassFilter">
                 <span>职介</span>
                 <select id="storyPickerClassSelect" aria-label="按职介筛选从者">
                   <option value="all">全部职介</option>
                 </select>
               </label>
-              <label class="story-picker-filter">
+              <label class="story-picker-filter" id="storyPickerRarityFilter">
                 <span>星级</span>
                 <select id="storyPickerRaritySelect" aria-label="按星级筛选从者">
                   <option value="all">全部星级</option>
+                </select>
+              </label>
+              <label class="story-picker-filter" id="storyPickerSourceFilter" hidden>
+                <span>来源</span>
+                <select id="storyPickerSourceSelect" aria-label="按剧情来源筛选资源">
+                  <option value="all">全部剧情来源</option>
+                </select>
+              </label>
+              <label class="story-picker-filter" id="storyPickerStoryFilter" hidden>
+                <span>&#21095;&#24773;</span>
+                <select id="storyPickerStorySelect" aria-label="&#25353;&#20855;&#20307;&#21095;&#24773;&#36873;&#25321;">
+                  <option value="all">&#20840;&#37096;&#20855;&#20307;&#21095;&#24773;</option>
                 </select>
               </label>
             </div>
           </div>
 
           <div class="story-picker-status" id="storyPickerStatus" aria-live="polite">正在读取人物数据</div>
+          <div class="story-picker-source-catalog" id="storyPickerSourceCatalog" hidden aria-label="&#21095;&#24773;&#26469;&#28304;"></div>
           <div class="story-picker-progress" id="storyPickerProgress" hidden aria-live="polite">
             <div class="story-picker-progress-head">
               <strong id="storyPickerProgressTitle">正在准备提取</strong>
@@ -876,8 +1147,11 @@
 
     <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
     <script src="story-picker.js?v=20260825-picker-reset-1" defer></script>
+    <script src="story-resource-catalog.js?v=20260830-story-index-1" defer></script>
+    <script src="craft-essence-editor.js?v=20260831-craft-essence-2" defer></script>
+    <script src="servant-card-editor.js?v=20260902-rarity-class-icon-2" defer></script>
     <script src="story-renderer.js?v=20260830-dialogue-controls-1" defer></script>
-    <script src="app.js?v=20260830-duplicate-actors-1" defer></script>
+    <script src="app.js?v=20260831-servant-card-1" defer></script>
   </body>
 </html>
 
