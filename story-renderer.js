@@ -32,6 +32,22 @@
   const STORY_TYPEWRITER_CHARACTERS_PER_SECOND = 20;
   const STORY_DIALOGUE_FONT_SCALE_MIN = 0.8;
   const STORY_DIALOGUE_FONT_SCALE_MAX = 1.4;
+  const STORY_ACTOR_ANIMATION_DURATION_DEFAULT = 0.7;
+  const STORY_ACTOR_EXIT_DURATION_DEFAULT = 0.5;
+
+  function clampStoryAnimationProgress(value) {
+    return Math.max(0, Math.min(1, Number(value) || 0));
+  }
+
+  function applyStoryAnimationEasing(progress, easing) {
+    const value = clampStoryAnimationProgress(progress);
+    if (easing === "linear") return value;
+    if (easing === "ease-in") return value * value;
+    if (easing === "ease-in-out") {
+      return value < 0.5 ? 2 * value * value : 1 - Math.pow(-2 * value + 2, 2) / 2;
+    }
+    return 1 - Math.pow(1 - value, 3);
+  }
 
   function drawCover(context, image, width, height) {
     const scale = Math.max(width / image.naturalWidth, height / image.naturalHeight);
@@ -613,6 +629,12 @@
       const actorProgress = scene.animateActors
         ? Math.max(0, Math.min(1, Number(scene.actorAnimationProgress) || 0))
         : 1;
+      const actorAnimationElapsed = Number.isFinite(Number(scene.actorAnimationElapsed))
+        ? Math.max(0, Number(scene.actorAnimationElapsed))
+        : null;
+      const actorExitAnimationRemaining = Number.isFinite(Number(scene.actorExitAnimationRemaining))
+        ? Math.max(0, Number(scene.actorExitAnimationRemaining))
+        : null;
       context.clearRect(0, 0, width, height);
       context.fillStyle = "#101213";
       context.fillRect(0, 0, width, height);
@@ -643,10 +665,35 @@
       actorLayout.forEach(({ actor, entry, x, y, width: actorWidth, height: actorHeight, isSpeaker }) => {
         const transition = scene.animateActors && ["fade", "slide-left", "slide-right", "flash"]
           .includes(actor.entryAnimation) ? actor.entryAnimation : "cut";
-        const actorOffset = transition === "slide-left"
-          ? (1 - actorProgress) * width
-          : transition === "slide-right" ? -(1 - actorProgress) * width : 0;
-        const actorAlpha = transition === "fade" ? actorProgress : 1;
+        const easing = ["linear", "ease-in", "ease-out", "ease-in-out"].includes(actor.animationEasing)
+          ? actor.animationEasing
+          : "ease-out";
+        const entryDuration = Math.max(0.2, Math.min(2, Number(actor.entryDuration) || STORY_ACTOR_ANIMATION_DURATION_DEFAULT));
+        const entryDelay = Math.max(0, Math.min(1.5, Number(actor.entryDelay) || 0));
+        const entryProgress = transition === "cut"
+          ? 1
+          : applyStoryAnimationEasing(
+            actorAnimationElapsed == null ? actorProgress : (actorAnimationElapsed - entryDelay) / entryDuration,
+            easing
+          );
+        const exitTransition = scene.animateActorExits && ["fade", "slide-left", "slide-right", "shrink"]
+          .includes(actor.exitAnimation) ? actor.exitAnimation : "none";
+        const exitDuration = Math.max(0.2, Math.min(2, Number(actor.exitDuration) || STORY_ACTOR_EXIT_DURATION_DEFAULT));
+        const exitProgress = exitTransition === "none"
+          ? 0
+          : applyStoryAnimationEasing(
+            actorExitAnimationRemaining == null ? 0 : 1 - actorExitAnimationRemaining / exitDuration,
+            easing
+          );
+        const slideDistance = Math.max(0.25, Math.min(2, Number(actor.slideDistance) || 1));
+        const entryOffset = transition === "slide-left"
+          ? -(1 - entryProgress) * width * slideDistance
+          : transition === "slide-right" ? (1 - entryProgress) * width * slideDistance : 0;
+        const exitOffset = exitTransition === "slide-left"
+          ? -exitProgress * width * slideDistance
+          : exitTransition === "slide-right" ? exitProgress * width * slideDistance : 0;
+        const entryAlpha = transition === "fade" ? entryProgress : 1;
+        const exitAlpha = exitTransition === "fade" || exitTransition === "shrink" ? 1 - exitProgress : 1;
         const actorOpacity = Number.isFinite(Number(actor.opacity)) ? Number(actor.opacity) : 1;
         const actorScale = Number.isFinite(Number(actor.scale))
           ? Math.max(0.5, Math.min(2, Number(actor.scale)))
@@ -657,17 +704,20 @@
         const actorOffsetY = Number.isFinite(Number(actor.offsetY))
           ? Math.max(-0.5, Math.min(0.5, Number(actor.offsetY)))
           : 0;
-        const transformedWidth = actorWidth * actorScale;
-        const transformedHeight = actorHeight * actorScale;
-        const transformedX = x + (actorWidth - transformedWidth) / 2 + actorOffsetX * width + actorOffset;
+        const exitScale = exitTransition === "shrink" ? Math.max(0, 1 - exitProgress) : 1;
+        const transformedWidth = actorWidth * actorScale * exitScale;
+        const transformedHeight = actorHeight * actorScale * exitScale;
+        const transformedX = x + (actorWidth - transformedWidth) / 2 + actorOffsetX * width + entryOffset + exitOffset;
         const transformedY = y + actorHeight - transformedHeight + actorOffsetY * height;
         const isInactive = Boolean(activeActorId && !isSpeaker);
         const colorMode = ["color", "dim"].includes(actor.colorMode) ? actor.colorMode : "auto";
         const shouldDim = colorMode === "dim" || (colorMode === "auto" && isInactive);
-        context.globalAlpha = actorAlpha * Math.max(0, Math.min(1, actorOpacity));
+        context.globalAlpha = entryAlpha * exitAlpha * Math.max(0, Math.min(1, actorOpacity));
         context.filter = shouldDim ? "grayscale(40%) brightness(82%)" : "none";
-        context.drawImage(entry.image, transformedX, transformedY, transformedWidth, transformedHeight);
-        if (transition === "flash" && actorProgress < 0.45) {
+        if (transformedWidth > 0.01 && transformedHeight > 0.01 && context.globalAlpha > 0.001) {
+          context.drawImage(entry.image, transformedX, transformedY, transformedWidth, transformedHeight);
+        }
+        if (transition === "flash" && entryProgress < 0.45) {
           drawActorFlash(
             context,
             entry.image,
@@ -675,7 +725,7 @@
             transformedY,
             transformedWidth,
             transformedHeight,
-            Math.max(0, Math.min(1, (0.45 - actorProgress) * 2.2))
+            Math.max(0, Math.min(1, (0.45 - entryProgress) * 2.2))
           );
         }
       });

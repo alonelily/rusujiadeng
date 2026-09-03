@@ -18,7 +18,16 @@
   const STORY_PROJECT_AUTOSAVE_DELAY = 350;
   const STORY_VARIANT_CACHE_VERSION = 2;
   const STORY_BGM_PAGE_SIZE = 80;
-  const STORY_ACTOR_ENTRY_DURATION = 0.7;
+  const STORY_ACTOR_ANIMATION_DURATION_MIN = 0.2;
+  const STORY_ACTOR_ANIMATION_DURATION_MAX = 2;
+  const STORY_ACTOR_ANIMATION_DURATION_DEFAULT = 0.7;
+  const STORY_ACTOR_ANIMATION_DELAY_MIN = 0;
+  const STORY_ACTOR_ANIMATION_DELAY_MAX = 1.5;
+  const STORY_ACTOR_ANIMATION_DELAY_DEFAULT = 0;
+  const STORY_ACTOR_ANIMATION_DISTANCE_MIN = 0.25;
+  const STORY_ACTOR_ANIMATION_DISTANCE_MAX = 2;
+  const STORY_ACTOR_ANIMATION_DISTANCE_DEFAULT = 1;
+  const STORY_ACTOR_EXIT_DURATION_DEFAULT = 0.5;
   // Exporting is an offline batch job. Prefer the encoder's low-latency path
   // and let the platform use hardware when it has a suitable implementation.
   // Both values are accepted by WebCodecs and are probed before encoding.
@@ -290,6 +299,16 @@
     storyActorAnimationPanel: document.getElementById("storyActorAnimationPanel"),
     storyActorAnimationName: document.getElementById("storyActorAnimationName"),
     storyActorEntryAnimationSelect: document.getElementById("storyActorEntryAnimationSelect"),
+    storyActorExitAnimationSelect: document.getElementById("storyActorExitAnimationSelect"),
+    storyActorAnimationEasingSelect: document.getElementById("storyActorAnimationEasingSelect"),
+    storyActorEntryDurationInput: document.getElementById("storyActorEntryDurationInput"),
+    storyActorEntryDurationValue: document.getElementById("storyActorEntryDurationValue"),
+    storyActorEntryDelayInput: document.getElementById("storyActorEntryDelayInput"),
+    storyActorEntryDelayValue: document.getElementById("storyActorEntryDelayValue"),
+    storyActorExitDurationInput: document.getElementById("storyActorExitDurationInput"),
+    storyActorExitDurationValue: document.getElementById("storyActorExitDurationValue"),
+    storyActorSlideDistanceInput: document.getElementById("storyActorSlideDistanceInput"),
+    storyActorSlideDistanceValue: document.getElementById("storyActorSlideDistanceValue"),
     storyPreviewActorAnimationButton: document.getElementById("storyPreviewActorAnimationButton"),
     storyDialogueList: document.getElementById("storyDialogueList"),
     storyDialogueSummary: document.getElementById("storyDialogueSummary"),
@@ -948,6 +967,7 @@
     const all = { id: "all", name: "全部剧情", category: "all", count: state.items.length };
     const entries = [all, ...(Array.isArray(sources) ? sources : [])];
     const selectedSource = entries.find((source) => source.id === state.storyResourceSourceId);
+    dom.storyResourceBrowser?.classList.toggle("is-source-selected", Boolean(selectedSource && selectedSource.id !== "all"));
     const renderCard = (source, parent = dom.storyResourceSourceRail) => {
       const button = document.createElement("button");
       button.type = "button";
@@ -955,22 +975,36 @@
       button.setAttribute("role", "option");
       button.setAttribute("aria-selected", String(source.id === state.storyResourceSourceId));
       button.dataset.sourceId = source.id;
-      const icon = document.createElement("span");
-      icon.className = "story-resource-source-card-icon";
+      const visual = document.createElement("span");
+      // Keep banner artwork separate from its descriptive copy.
+      visual.className = "story-resource-source-visual story-resource-source-card-icon";
+      const fallbackLabel = source.category === "event" ? "E" : source.category === "main" ? "M" : source.category === "interlude" ? "I" : "A";
+      const showFallback = () => {
+        visual.replaceChildren();
+        visual.classList.remove("has-image");
+        visual.classList.add("is-fallback");
+        visual.textContent = fallbackLabel;
+        button.classList.add("has-fallback-visual");
+      };
       if (source.icon) {
+        visual.classList.add("has-image");
         const image = document.createElement("img");
         image.alt = "";
         image.loading = "lazy";
         image.src = source.icon;
-        icon.append(image);
+        image.addEventListener("error", showFallback, { once: true });
+        visual.append(image);
       } else {
-        icon.textContent = source.category === "event" ? "E" : source.category === "main" ? "M" : source.category === "interlude" ? "I" : "A";
+        showFallback();
       }
+      const copy = document.createElement("span");
+      copy.className = "story-resource-source-copy";
       const name = document.createElement("strong");
       name.textContent = source.name;
       const count = document.createElement("small");
       count.textContent = `${countFormatter.format(source.count)} 资源`;
-      button.append(icon, name, count);
+      copy.append(name, count);
+      button.append(visual, copy);
       button.addEventListener("click", () => {
         state.storyResourceSourceId = source.id;
         dom.storyResourceStorySelect.value = source.id;
@@ -3623,7 +3657,16 @@
             colorMode: normalizeStoryActorColorMode(actor),
             entryAnimation: normalizeStoryActorEntryAnimation(
               actor && actor.entryAnimation != null ? actor.entryAnimation : scene.transition
-            )
+            ),
+            entryDuration: normalizeStoryActorAnimationDuration(actor && actor.entryDuration),
+            entryDelay: normalizeStoryActorAnimationDelay(actor && actor.entryDelay),
+            exitAnimation: normalizeStoryActorExitAnimation(actor && actor.exitAnimation),
+            exitDuration: normalizeStoryActorAnimationDuration(
+              actor && actor.exitDuration,
+              STORY_ACTOR_EXIT_DURATION_DEFAULT
+            ),
+            slideDistance: normalizeStoryActorAnimationDistance(actor && actor.slideDistance),
+            animationEasing: normalizeStoryActorAnimationEasing(actor && actor.animationEasing)
           })) : [],
           dialogue: activeDialogue,
           dialogues,
@@ -3687,6 +3730,44 @@
 
   function normalizeStoryActorEntryAnimation(value) {
     return ["cut", "fade", "slide-left", "slide-right", "flash"].includes(value) ? value : "cut";
+  }
+
+  function normalizeStoryActorExitAnimation(value) {
+    return ["none", "fade", "slide-left", "slide-right", "shrink"].includes(value) ? value : "none";
+  }
+
+  function normalizeStoryActorAnimationDuration(value, fallback = STORY_ACTOR_ANIMATION_DURATION_DEFAULT) {
+    if (value == null || value === "") return fallback;
+    return normalizeStoryActorTransform(
+      value,
+      fallback,
+      STORY_ACTOR_ANIMATION_DURATION_MIN,
+      STORY_ACTOR_ANIMATION_DURATION_MAX
+    );
+  }
+
+  function normalizeStoryActorAnimationDelay(value) {
+    if (value == null || value === "") return STORY_ACTOR_ANIMATION_DELAY_DEFAULT;
+    return normalizeStoryActorTransform(
+      value,
+      STORY_ACTOR_ANIMATION_DELAY_DEFAULT,
+      STORY_ACTOR_ANIMATION_DELAY_MIN,
+      STORY_ACTOR_ANIMATION_DELAY_MAX
+    );
+  }
+
+  function normalizeStoryActorAnimationDistance(value) {
+    if (value == null || value === "") return STORY_ACTOR_ANIMATION_DISTANCE_DEFAULT;
+    return normalizeStoryActorTransform(
+      value,
+      STORY_ACTOR_ANIMATION_DISTANCE_DEFAULT,
+      STORY_ACTOR_ANIMATION_DISTANCE_MIN,
+      STORY_ACTOR_ANIMATION_DISTANCE_MAX
+    );
+  }
+
+  function normalizeStoryActorAnimationEasing(value) {
+    return ["linear", "ease-in", "ease-out", "ease-in-out"].includes(value) ? value : "ease-out";
   }
 
   function getStoryDialogues(scene) {
@@ -3756,14 +3837,24 @@
     scene,
     dialogue = getActiveStoryDialogue(scene),
     animateActors = false,
-    actorAnimationProgress = 1
+    actorAnimationProgress = 1,
+    animationOptions = {}
   ) {
     return {
       ...scene,
       actors: getStoryActorsForDialogue(scene, dialogue),
       dialogue,
       animateActors: Boolean(animateActors),
-      actorAnimationProgress: Math.max(0, Math.min(1, Number(actorAnimationProgress) || 0))
+      actorAnimationProgress: Math.max(0, Math.min(1, Number(actorAnimationProgress) || 0)),
+      actorAnimationElapsed: Number.isFinite(Number(animationOptions.actorAnimationElapsed))
+        ? Math.max(0, Number(animationOptions.actorAnimationElapsed))
+        : null,
+      actorAnimationWindow: Math.max(0, Number(animationOptions.actorAnimationWindow) || 0),
+      animateActorExits: Boolean(animationOptions.animateActorExits),
+      actorExitAnimationRemaining: Number.isFinite(Number(animationOptions.actorExitAnimationRemaining))
+        ? Math.max(0, Number(animationOptions.actorExitAnimationRemaining))
+        : null,
+      actorExitAnimationWindow: Math.max(0, Number(animationOptions.actorExitAnimationWindow) || 0)
     };
   }
 
@@ -5012,7 +5103,7 @@
       const name = document.createElement("strong");
       name.textContent = actorName;
       const animation = document.createElement("small");
-      animation.textContent = getStoryActorAnimationLabel(actor.entryAnimation);
+      animation.textContent = `${getStoryActorAnimationLabel(actor.entryAnimation)} · ${getStoryActorExitAnimationLabel(actor.exitAnimation)}`;
       copy.append(name, animation);
       const radio = document.createElement("span");
       radio.className = "story-actor-radio";
@@ -5026,6 +5117,40 @@
     dom.storyAnimationSummary.textContent = `正在设置：${getStoryActorSelectionLabel(scene, selectedActor, selectedIndex)}`;
     dom.storyActorAnimationName.textContent = getStoryActorDisplayName(selectedActor, selectedIndex);
     dom.storyActorEntryAnimationSelect.value = normalizeStoryActorEntryAnimation(selectedActor.entryAnimation);
+    dom.storyActorExitAnimationSelect.value = normalizeStoryActorExitAnimation(selectedActor.exitAnimation);
+    dom.storyActorAnimationEasingSelect.value = normalizeStoryActorAnimationEasing(selectedActor.animationEasing);
+    const entryDuration = normalizeStoryActorAnimationDuration(selectedActor.entryDuration);
+    const entryDelay = normalizeStoryActorAnimationDelay(selectedActor.entryDelay);
+    const exitDuration = normalizeStoryActorAnimationDuration(
+      selectedActor.exitDuration,
+      STORY_ACTOR_EXIT_DURATION_DEFAULT
+    );
+    const slideDistance = normalizeStoryActorAnimationDistance(selectedActor.slideDistance);
+    dom.storyActorEntryDurationInput.value = String(entryDuration);
+    dom.storyActorEntryDelayInput.value = String(entryDelay);
+    dom.storyActorExitDurationInput.value = String(exitDuration);
+    dom.storyActorSlideDistanceInput.value = String(slideDistance);
+    setStoryAnimationOutput(dom.storyActorEntryDurationValue, `${formatStoryAnimationNumber(entryDuration)} 秒`);
+    setStoryAnimationOutput(dom.storyActorEntryDelayValue, `${formatStoryAnimationNumber(entryDelay)} 秒`);
+    setStoryAnimationOutput(dom.storyActorExitDurationValue, `${formatStoryAnimationNumber(exitDuration)} 秒`);
+    setStoryAnimationOutput(dom.storyActorSlideDistanceValue, `${Math.round(slideDistance * 100)}%`);
+    const entryIsCut = dom.storyActorEntryAnimationSelect.value === "cut";
+    const exitIsNone = dom.storyActorExitAnimationSelect.value === "none";
+    const usesSlide = dom.storyActorEntryAnimationSelect.value.startsWith("slide-") ||
+      dom.storyActorExitAnimationSelect.value.startsWith("slide-");
+    dom.storyActorEntryDurationInput.disabled = entryIsCut;
+    dom.storyActorEntryDelayInput.disabled = entryIsCut;
+    dom.storyActorExitDurationInput.disabled = exitIsNone;
+    dom.storyActorSlideDistanceInput.disabled = !usesSlide;
+  }
+
+  function formatStoryAnimationNumber(value) {
+    return Number(value).toFixed(1).replace(/\.0$/, "");
+  }
+
+  function setStoryAnimationOutput(output, value) {
+    output.value = value;
+    output.textContent = value;
   }
 
   function getStoryActorAnimationLabel(value) {
@@ -5038,6 +5163,16 @@
     }[normalizeStoryActorEntryAnimation(value)];
   }
 
+  function getStoryActorExitAnimationLabel(value) {
+    return {
+      none: "不退场",
+      fade: "淡出",
+      "slide-left": "向左滑出",
+      "slide-right": "向右滑出",
+      shrink: "缩小消失"
+    }[normalizeStoryActorExitAnimation(value)];
+  }
+
   function selectStoryAnimationActor(scene, actorId) {
     if (!scene || !scene.actors.some((actor) => actor.assetId === actorId)) {
       return;
@@ -5047,15 +5182,43 @@
   }
 
   function updateStoryActorEntryAnimation() {
+    updateStoryActorAnimationSetting("entryAnimation", dom.storyActorEntryAnimationSelect.value);
+  }
+
+  function updateStoryActorAnimationSetting(field, value) {
     const scene = getActiveStoryScene();
     const actor = getStorySelectedAnimationActor(scene);
-    if (!scene || !actor) {
-      return;
-    }
-    actor.entryAnimation = normalizeStoryActorEntryAnimation(dom.storyActorEntryAnimationSelect.value);
+    if (!scene || !actor) return;
+    const normalizers = {
+      entryAnimation: normalizeStoryActorEntryAnimation,
+      exitAnimation: normalizeStoryActorExitAnimation,
+      animationEasing: normalizeStoryActorAnimationEasing,
+      entryDuration: normalizeStoryActorAnimationDuration,
+      entryDelay: normalizeStoryActorAnimationDelay,
+      exitDuration: (nextValue) => normalizeStoryActorAnimationDuration(nextValue, STORY_ACTOR_EXIT_DURATION_DEFAULT),
+      slideDistance: normalizeStoryActorAnimationDistance
+    };
+    actor[field] = normalizers[field](value);
     saveStoryProject();
     renderStoryAnimationOptions(scene);
     renderStoryCanvas(scene, 1);
+  }
+
+  function getStoryActorEntryAnimationWindow(scene) {
+    return Math.max(0, ...scene.actors.map((actor) => (
+      normalizeStoryActorEntryAnimation(actor.entryAnimation) === "cut"
+        ? 0
+        : normalizeStoryActorAnimationDelay(actor.entryDelay) +
+          normalizeStoryActorAnimationDuration(actor.entryDuration)
+    )));
+  }
+
+  function getStoryActorExitAnimationWindow(scene) {
+    return Math.max(0, ...scene.actors.map((actor) => (
+      normalizeStoryActorExitAnimation(actor.exitAnimation) === "none"
+        ? 0
+        : normalizeStoryActorAnimationDuration(actor.exitDuration, STORY_ACTOR_EXIT_DURATION_DEFAULT)
+    )));
   }
 
   function previewStoryActorAnimations() {
@@ -5067,11 +5230,25 @@
       cancelAnimationFrame(state.story.playbackFrame);
     }
     const dialogue = getActiveStoryDialogue(scene);
+    const entryWindow = getStoryActorEntryAnimationWindow(scene);
+    const exitWindow = getStoryActorExitAnimationWindow(scene);
+    const holdDuration = entryWindow > 0 && exitWindow > 0 ? 0.35 : 0;
+    const exitStart = entryWindow + holdDuration;
+    const totalDuration = Math.max(0.01, exitStart + exitWindow);
     const startedAt = performance.now();
     const frame = (now) => {
-      const progress = Math.min(1, Math.max(0, (now - startedAt) / (STORY_ACTOR_ENTRY_DURATION * 1000)));
-      renderStoryCanvas(scene, 1, dialogue, true, progress);
-      if (progress < 1 && state.story.open) {
+      const elapsed = Math.min(totalDuration, Math.max(0, (now - startedAt) / 1000));
+      const exitElapsed = Math.max(0, elapsed - exitStart);
+      const animationOptions = {
+        actorAnimationElapsed: Math.min(entryWindow, elapsed),
+        actorAnimationWindow: entryWindow,
+        animateActorExits: exitWindow > 0 && elapsed >= exitStart,
+        actorExitAnimationRemaining: Math.max(0, exitWindow - exitElapsed),
+        actorExitAnimationWindow: exitWindow
+      };
+      const progress = entryWindow > 0 ? Math.min(1, elapsed / entryWindow) : 1;
+      renderStoryCanvas(scene, 1, dialogue, entryWindow > 0, progress, animationOptions);
+      if (elapsed < totalDuration && state.story.open) {
         state.story.playbackFrame = requestAnimationFrame(frame);
       } else {
         state.story.playbackFrame = null;
@@ -7001,7 +7178,13 @@
       offsetX: 0,
       offsetY: 0,
       colorMode: "auto",
-      entryAnimation: "cut"
+      entryAnimation: "cut",
+      entryDuration: STORY_ACTOR_ANIMATION_DURATION_DEFAULT,
+      entryDelay: STORY_ACTOR_ANIMATION_DELAY_DEFAULT,
+      exitAnimation: "none",
+      exitDuration: STORY_ACTOR_EXIT_DURATION_DEFAULT,
+      slideDistance: STORY_ACTOR_ANIMATION_DISTANCE_DEFAULT,
+      animationEasing: "ease-out"
     };
     scene.actors.push(actor);
     state.story.uniformTransformSessionByScene.delete(scene.id);
@@ -7093,7 +7276,8 @@
     progress,
     dialogue = null,
     animateActors = false,
-    actorAnimationProgress = 1
+    actorAnimationProgress = 1,
+    animationOptions = {}
   ) {
     if (!dom.storyCanvas || !scene || !window.FgoStoryRenderer) {
       return;
@@ -7121,7 +7305,8 @@
       scene,
       activeDialogue,
       animateActors,
-      actorAnimationProgress
+      actorAnimationProgress,
+      animationOptions
     );
     if (typeof storyRenderer.requestRender === "function") {
       // Interactive edits are coalesced into one paint per animation frame.
@@ -7145,6 +7330,8 @@
     }
     const dialogues = getStoryDialogues(scene);
     const totalDuration = dialogues.reduce((total, dialogue) => total + dialogue.duration, 0);
+    const entryWindow = getStoryActorEntryAnimationWindow(scene);
+    const exitWindow = Math.min(totalDuration, getStoryActorExitAnimationWindow(scene));
     const startedAt = performance.now();
     let playbackDialogueId = null;
     let playbackDialogueIndex = 0;
@@ -7179,8 +7366,17 @@
         renderStoryDialogueList(scene);
         renderStoryActorList(scene);
       }
-      const actorAnimationProgress = Math.min(1, Math.max(0, (elapsed - dialogueStart) / STORY_ACTOR_ENTRY_DURATION));
-      renderStoryCanvas(scene, dialogueProgress, dialogue, dialogueIndex === 0, actorAnimationProgress);
+      const actorAnimationProgress = entryWindow > 0 ? Math.min(1, elapsed / entryWindow) : 1;
+      const remaining = Math.max(0, totalDuration - elapsed);
+      const animateEntries = entryWindow > 0 && elapsed < entryWindow;
+      const animateExits = exitWindow > 0 && remaining <= exitWindow;
+      renderStoryCanvas(scene, dialogueProgress, dialogue, animateEntries, actorAnimationProgress, {
+        actorAnimationElapsed: elapsed,
+        actorAnimationWindow: entryWindow,
+        animateActorExits: animateExits,
+        actorExitAnimationRemaining: remaining,
+        actorExitAnimationWindow: exitWindow
+      });
       if (elapsed < totalDuration && state.story.open) {
         state.story.playbackFrame = requestAnimationFrame(frame);
       } else {
@@ -7626,19 +7822,32 @@
 
   function getStoryTimelineSegments(project) {
     let cursor = 0;
-    return project.scenes.flatMap((scene) => getStoryDialogues(scene).map((dialogue, index) => {
-      const duration = Math.max(0.001, Number(dialogue.duration) || 0.001);
-      const segment = {
-        scene,
-        dialogue,
-        animateActors: index === 0,
-        duration,
-        start: cursor,
-        end: cursor + duration
-      };
-      cursor += duration;
-      return segment;
-    }));
+    return project.scenes.flatMap((scene) => {
+      const dialogues = getStoryDialogues(scene);
+      const sceneStart = cursor;
+      const sceneDuration = dialogues.reduce(
+        (total, dialogue) => total + Math.max(0.001, Number(dialogue.duration) || 0.001),
+        0
+      );
+      const sceneEnd = sceneStart + sceneDuration;
+      return dialogues.map((dialogue, index) => {
+        const duration = Math.max(0.001, Number(dialogue.duration) || 0.001);
+        const segment = {
+          scene,
+          dialogue,
+          animateActors: index === 0,
+          animateActorExits: index === dialogues.length - 1,
+          duration,
+          start: cursor,
+          end: cursor + duration,
+          sceneStart,
+          sceneEnd,
+          sceneDuration
+        };
+        cursor += duration;
+        return segment;
+      });
+    });
   }
 
   function findStoryTimelineSegment(segments, elapsed) {
@@ -7667,7 +7876,13 @@
     }
     const active = match.segment;
     const segmentProgress = Math.min(1, Math.max(0, (elapsed - active.start) / active.duration));
-    const actorAnimationProgress = Math.min(1, Math.max(0, (elapsed - active.start) / STORY_ACTOR_ENTRY_DURATION));
+    const sceneElapsed = Math.max(0, elapsed - active.sceneStart);
+    const sceneRemaining = Math.max(0, active.sceneEnd - elapsed);
+    const entryWindow = Math.min(active.sceneDuration, getStoryActorEntryAnimationWindow(active.scene));
+    const exitWindow = Math.min(active.sceneDuration, getStoryActorExitAnimationWindow(active.scene));
+    const animateActors = entryWindow > 0 && sceneElapsed < entryWindow;
+    const animateActorExits = exitWindow > 0 && sceneRemaining <= exitWindow;
+    const actorAnimationProgress = entryWindow > 0 ? Math.min(1, sceneElapsed / entryWindow) : 1;
     // Most export frames are visually identical. Keep the existing canvas when
     // neither typewriter text nor an actor entry animation is changing.
     const visibleCharacterCount = active.dialogue.typewriter
@@ -7676,9 +7891,9 @@
         Math.floor(Math.max(0, elapsed - active.start) * STORY_TYPEWRITER_CHARACTERS_PER_SECOND)
       )
       : -1;
-    const actorProgressKey = active.animateActors
-      ? Math.round(actorAnimationProgress * 1000)
-      : 1;
+    const actorProgressKey = animateActors || animateActorExits
+      ? `${Math.round(actorAnimationProgress * 1000)}:${Math.round(sceneRemaining * 1000)}`
+      : "1";
     const renderKey = `${match.index}:${visibleCharacterCount}:${actorProgressKey}`;
     if (renderState && renderState.key === renderKey) {
       return false;
@@ -7686,8 +7901,15 @@
     renderer.render(createStoryRenderScene(
       active.scene,
       active.dialogue,
-      active.animateActors,
-      actorAnimationProgress
+      animateActors,
+      actorAnimationProgress,
+      {
+        actorAnimationElapsed: sceneElapsed,
+        actorAnimationWindow: entryWindow,
+        animateActorExits,
+        actorExitAnimationRemaining: sceneRemaining,
+        actorExitAnimationWindow: exitWindow
+      }
     ), segmentProgress);
     if (renderState) {
       renderState.key = renderKey;
@@ -7859,8 +8081,18 @@
           const visibleCharacters = activeSegment.dialogue.typewriter
             ? Math.min(textLength, Math.floor(segmentElapsed * STORY_TYPEWRITER_CHARACTERS_PER_SECOND))
             : textLength;
-          const actorAnimating = activeSegment.animateActors &&
-            segmentElapsed < STORY_ACTOR_ENTRY_DURATION;
+          const sceneElapsed = Math.max(0, timestamp - activeSegment.sceneStart);
+          const sceneRemaining = Math.max(0, activeSegment.sceneEnd - timestamp);
+          const entryWindow = Math.min(
+            activeSegment.sceneDuration,
+            getStoryActorEntryAnimationWindow(activeSegment.scene)
+          );
+          const exitWindow = Math.min(
+            activeSegment.sceneDuration,
+            getStoryActorExitAnimationWindow(activeSegment.scene)
+          );
+          const actorAnimating = (entryWindow > 0 && sceneElapsed < entryWindow) ||
+            (exitWindow > 0 && sceneRemaining <= exitWindow);
           const typewriterAnimating = activeSegment.dialogue.typewriter && visibleCharacters < textLength &&
             segmentElapsed < segmentDuration;
           // A static dialogue can be represented by one long-duration frame.
@@ -8800,6 +9032,24 @@
       selectStoryAnimationActor(getActiveStoryScene(), dom.storyAnimationActorSelect.value);
     });
     dom.storyActorEntryAnimationSelect.addEventListener("change", updateStoryActorEntryAnimation);
+    dom.storyActorExitAnimationSelect.addEventListener("change", () => {
+      updateStoryActorAnimationSetting("exitAnimation", dom.storyActorExitAnimationSelect.value);
+    });
+    dom.storyActorAnimationEasingSelect.addEventListener("change", () => {
+      updateStoryActorAnimationSetting("animationEasing", dom.storyActorAnimationEasingSelect.value);
+    });
+    dom.storyActorEntryDurationInput.addEventListener("input", () => {
+      updateStoryActorAnimationSetting("entryDuration", dom.storyActorEntryDurationInput.value);
+    });
+    dom.storyActorEntryDelayInput.addEventListener("input", () => {
+      updateStoryActorAnimationSetting("entryDelay", dom.storyActorEntryDelayInput.value);
+    });
+    dom.storyActorExitDurationInput.addEventListener("input", () => {
+      updateStoryActorAnimationSetting("exitDuration", dom.storyActorExitDurationInput.value);
+    });
+    dom.storyActorSlideDistanceInput.addEventListener("input", () => {
+      updateStoryActorAnimationSetting("slideDistance", dom.storyActorSlideDistanceInput.value);
+    });
     dom.storyPreviewActorAnimationButton.addEventListener("click", previewStoryActorAnimations);
     dom.storyBgmFileInput.addEventListener("change", () => updateStoryBgm(dom.storyBgmFileInput.files[0] || null).catch(() => showToast("保存本地 BGM 失败")));
     dom.storyChooseBgmButton.addEventListener("click", () => openStoryBgmPicker());

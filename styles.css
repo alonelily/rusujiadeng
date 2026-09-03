@@ -275,6 +275,22 @@ main {
   border-bottom: 1px solid var(--border);
 }
 
+.story-resource-browser.is-source-selected {
+  display: grid;
+  grid-template-columns: minmax(180px, 200px) minmax(0, 1fr);
+  align-items: center;
+  gap: 18px;
+  padding-top: 10px;
+}
+
+.story-resource-browser.is-source-selected .story-resource-browser-heading {
+  margin-bottom: 14px;
+}
+
+.story-resource-browser.is-source-selected .story-resource-browser-heading > span {
+  display: none;
+}
+
 .story-resource-browser-heading {
   display: flex;
   align-items: end;
@@ -304,11 +320,11 @@ main {
   display: grid;
   width: 100%;
   min-width: 0;
-  min-height: 106px;
-  grid-template-columns: 46px 1fr;
-  grid-template-rows: 1fr auto;
-  gap: 6px 9px;
-  padding: 9px;
+  min-height: 110px;
+  grid-template-columns: minmax(200px, 1.25fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+  padding: 10px 12px;
   border: 1px solid var(--border);
   border-radius: 6px;
   background: var(--surface);
@@ -332,18 +348,20 @@ main {
 
 .story-resource-source-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
-  gap: 9px;
+  grid-template-columns: repeat(auto-fill, minmax(390px, 1fr));
+  gap: 12px;
 }
 
 .story-resource-source-rail > .story-resource-source-card {
-  max-width: 220px;
+  max-width: 420px;
 }
 
 .story-resource-selected-source {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
   gap: 12px;
+  padding: 0 2px 14px 0;
 }
 
 .story-resource-source-back {
@@ -351,33 +369,72 @@ main {
 }
 
 .story-resource-selected-card {
-  width: min(420px, 100%);
+  width: min(680px, 100%);
+}
+
+.story-resource-selected-card .story-resource-source-card {
+  min-height: 96px;
+  grid-template-columns: minmax(190px, 0.9fr) minmax(0, 1fr);
+  border-left: 2px solid var(--gold);
+  border-radius: 0;
+  border-top-color: transparent;
+  border-right-color: transparent;
+  border-bottom-color: transparent;
+  background: transparent;
 }
 
 .story-resource-source-card:hover,
 .story-resource-source-card[aria-selected="true"] {
-  border-color: var(--gold);
-  background: var(--surface-soft);
+  background: var(--surface-raised);
   color: var(--text);
+}
+
+.story-resource-browser.is-source-selected .story-resource-selected-card .story-resource-source-card[aria-selected="true"] {
+  background: transparent;
+}
+
+.story-resource-source-card:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+.story-resource-source-card.has-fallback-visual {
+  grid-template-columns: 52px minmax(0, 1fr);
 }
 
 .story-resource-source-card-icon {
   display: grid;
-  width: 46px;
-  height: 46px;
-  grid-row: 1 / span 2;
+  width: 100%;
+  min-width: 0;
+  aspect-ratio: 456 / 134;
   place-items: center;
   overflow: hidden;
-  border-radius: 4px;
-  background: #2e5d70;
-  color: #fff;
+  border-radius: 2px;
+  background: transparent;
+}
+
+.story-resource-source-card-icon.is-fallback {
+  width: 48px;
+  aspect-ratio: 1;
+  border: 1px solid var(--border);
+  background: var(--surface-soft);
+  color: var(--text-muted);
   font-weight: 700;
 }
 
 .story-resource-source-card-icon img {
+  display: block;
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
+}
+
+.story-resource-source-copy {
+  display: grid;
+  min-width: 0;
+  align-content: center;
+  gap: 8px;
+  padding: 2px 2px 2px 0;
 }
 
 .story-resource-source-card strong {
@@ -391,10 +448,15 @@ main {
 
 .story-resource-source-card small {
   color: var(--gold);
-  font-size: 10px;
+  font-size: 11px;
 }
 
 @media (max-width: 640px) {
+  .story-resource-browser.is-source-selected {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+
   .story-resource-browser-heading,
   .story-resource-selected-source {
     align-items: stretch;
@@ -405,8 +467,28 @@ main {
     grid-template-columns: 1fr;
   }
 
+  .story-resource-source-card {
+    grid-template-columns: minmax(148px, 1.1fr) minmax(0, 1fr);
+    gap: 11px;
+    padding: 9px 10px;
+  }
+
+  .story-resource-source-card-icon {
+    width: 100%;
+  }
+
   .story-resource-selected-card {
     width: 100%;
+  }
+
+  .story-resource-selected-card .story-resource-source-card {
+    min-height: 110px;
+    grid-template-columns: minmax(148px, 1.1fr) minmax(0, 1fr);
+  }
+
+  .story-resource-selected-card .story-resource-source-card.has-fallback-visual {
+    min-height: 72px;
+    grid-template-columns: 52px minmax(0, 1fr);
   }
 }
 
@@ -2772,8 +2854,8 @@ footer a:hover {
 
 .story-actor-animation-controls {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: end;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: stretch;
   gap: 14px;
   padding: 12px;
   border: 1px solid var(--border);
@@ -2787,6 +2869,21 @@ footer a:hover {
 
 .story-actor-animation-controls .story-actor-transform-heading {
   grid-column: 1 / -1;
+}
+
+.story-animation-effect-grid,
+.story-animation-parameter-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.story-animation-effect-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.story-animation-parameter-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding-top: 2px;
 }
 
 .story-animation-field {
@@ -2803,6 +2900,38 @@ footer a:hover {
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--text);
+}
+
+.story-animation-range {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  color: var(--text-dim);
+  font-size: 10px;
+}
+
+.story-animation-range > span {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.story-animation-range output {
+  color: var(--gold);
+  white-space: nowrap;
+}
+
+.story-animation-range input[type="range"] {
+  width: 100%;
+  accent-color: var(--cyan);
+}
+
+.story-animation-range input[type="range"]:disabled {
+  opacity: 0.42;
+}
+
+.story-actor-animation-controls > .secondary-button {
+  justify-self: start;
 }
 
 .story-actor-transform[hidden] {
@@ -4701,6 +4830,11 @@ body.is-story-project-library-open {
   .story-actor-animation-controls {
     grid-template-columns: 1fr;
     align-items: stretch;
+  }
+
+  .story-animation-effect-grid,
+  .story-animation-parameter-grid {
+    grid-template-columns: 1fr;
   }
 
   .story-actor-animation-controls .secondary-button {

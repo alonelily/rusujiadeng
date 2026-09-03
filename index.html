@@ -12,7 +12,7 @@
       content="Atlas Academy FGO 礼装与从者立绘资源浏览器"
     />
     <title>如数迦贞</title>
-    <link rel="stylesheet" href="styles.css?v=20260903-story-source-groups-1" />
+    <link rel="stylesheet" href="styles.css?v=20260903-story-banner-standalone-6" />
   </head>
   <body class="is-intro-open">
     <section class="source-intro" id="sourceIntro" role="dialog" aria-modal="true" aria-labelledby="sourceIntroTitle">
@@ -40,7 +40,7 @@
           <header class="intro-update-heading">
             <span>VERSION UPDATE</span>
             <strong id="updateNoticeTitle">更新公告</strong>
-            <time datetime="2026-08-30">2026.08.30</time>
+            <time datetime="2026-09-03">2026.09.03</time>
           </header>
           <ul class="intro-update-list">
             <li>
@@ -62,6 +62,10 @@
             <li>
               <strong>多分镜导出优化</strong>
               <span>按分镜处理图片并降低导出过程的内存占用，减少多分镜视频导出时闪退的问题。</span>
+            </li>
+            <li>
+              <strong>剧情来源索引与 Android 3.3.3</strong>
+              <span>剧情立绘和背景支持按主线、活动等来源快速选择；Android 已同步最新功能并发布正式更新。</span>
             </li>
           </ul>
         </aside>
@@ -525,17 +529,56 @@
                         <span>设置选中人物的动画</span>
                         <strong id="storyActorAnimationName"></strong>
                       </div>
-                      <label class="story-animation-field">
-                        <span>入场效果</span>
-                        <select id="storyActorEntryAnimationSelect">
-                          <option value="cut">直接出现</option>
-                          <option value="fade">人物淡入</option>
-                          <option value="slide-left">从左滑入</option>
-                          <option value="slide-right">从右滑入</option>
-                          <option value="flash">人物闪白</option>
-                        </select>
-                      </label>
-                      <button class="secondary-button" id="storyPreviewActorAnimationButton" type="button">预览当前画面动画</button>
+                      <div class="story-animation-effect-grid">
+                        <label class="story-animation-field">
+                          <span>入场效果</span>
+                          <select id="storyActorEntryAnimationSelect">
+                            <option value="cut">直接出现</option>
+                            <option value="fade">人物淡入</option>
+                            <option value="slide-left">从左滑入</option>
+                            <option value="slide-right">从右滑入</option>
+                            <option value="flash">人物闪白</option>
+                          </select>
+                        </label>
+                        <label class="story-animation-field">
+                          <span>退场效果</span>
+                          <select id="storyActorExitAnimationSelect">
+                            <option value="none">保持到画面结束</option>
+                            <option value="fade">人物淡出</option>
+                            <option value="slide-left">向左滑出</option>
+                            <option value="slide-right">向右滑出</option>
+                            <option value="shrink">缩小消失</option>
+                          </select>
+                        </label>
+                        <label class="story-animation-field">
+                          <span>速度曲线</span>
+                          <select id="storyActorAnimationEasingSelect">
+                            <option value="ease-out">快速进入</option>
+                            <option value="ease-in-out">平滑</option>
+                            <option value="linear">匀速</option>
+                            <option value="ease-in">逐渐加速</option>
+                          </select>
+                        </label>
+                      </div>
+                      <div class="story-animation-parameter-grid">
+                        <label class="story-animation-range">
+                          <span>入场时长 <output id="storyActorEntryDurationValue" for="storyActorEntryDurationInput">0.7 秒</output></span>
+                          <input id="storyActorEntryDurationInput" type="range" min="0.2" max="2" step="0.1" value="0.7" />
+                        </label>
+                        <label class="story-animation-range">
+                          <span>入场延迟 <output id="storyActorEntryDelayValue" for="storyActorEntryDelayInput">0 秒</output></span>
+                          <input id="storyActorEntryDelayInput" type="range" min="0" max="1.5" step="0.1" value="0" />
+                        </label>
+                        <label class="story-animation-range">
+                          <span>退场时长 <output id="storyActorExitDurationValue" for="storyActorExitDurationInput">0.5 秒</output></span>
+                          <input id="storyActorExitDurationInput" type="range" min="0.2" max="2" step="0.1" value="0.5" />
+                        </label>
+                        <label class="story-animation-range">
+                          <span>滑动距离 <output id="storyActorSlideDistanceValue" for="storyActorSlideDistanceInput">100%</output></span>
+                          <input id="storyActorSlideDistanceInput" type="range" min="0.25" max="2" step="0.05" value="1" />
+                        </label>
+                      </div>
+                      <button class="secondary-button" id="storyPreviewActorAnimationButton" type="button">预览入场与退场</button>
                     </div>
                   </div>
                 </section>
@@ -1166,8 +1209,8 @@
     <script src="story-resource-catalog.js?v=20260830-story-index-1" defer></script>
     <script src="craft-essence-editor.js?v=20260831-craft-essence-2" defer></script>
     <script src="servant-card-editor.js?v=20260902-rarity-class-icon-2" defer></script>
-    <script src="story-renderer.js?v=20260830-dialogue-controls-1" defer></script>
-    <script src="app.js?v=20260903-story-source-groups-1" defer></script>
+    <script src="story-renderer.js?v=20260903-actor-animation-controls-1" defer></script>
+    <script src="app.js?v=20260903-story-banner-standalone-4" defer></script>
   </body>
 </html>
 

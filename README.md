@@ -8,6 +8,10 @@
 
 素材和 BGM 会按需从 Atlas Academy 在线加载，因此浏览素材时需要网络连接。剧情编辑、图片导入、差分提取和视频导出均在本地浏览器中完成。
 
+## Android 下载
+
+Android 最新正式版为 `3.3.3`（versionCode 29），可通过[稳定下载链接](https://github.com/alonelily/rusujiadeng/releases/latest/download/rusujiadeng-android.apk)安装。安装包 SHA-256：`F6F4F54F2AAC9AA28D003ABFDEB81B209829F43CD66FFE69BF641E58C20B1C81`。
+
 ## 本地作品与备份
 
 剧情作品、生成差分和本地 BGM 默认保存在当前浏览器的 IndexedDB 中，不会上传到本项目的服务器。更换设备、清理 Safari 数据或移除主屏网页前，请在剧情生成器中导出 `.zip` 备份文件；需要继续编辑时再导入该文件。旧版 `.rusu` 备份仍可直接导入。
