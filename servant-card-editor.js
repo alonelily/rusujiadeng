@@ -9,6 +9,8 @@
   const RIGHT_PAGE_WIDTH = 1074;
   const PAGE_TOP = 264;
   const PAGE_BACKGROUND_COLOR = "#152c3a";
+  const PAGE_SCROLLBAR_TRACK = { x: 1861, y: 268, width: 36, height: 806 };
+  const PAGE_SCROLLBAR_THUMB = { x: 1854, y: 291, width: 50, height: 151 };
   const ABILITY_SECTION_GAPS = [
     { y: 580, height: 25 },
     { y: 1296, height: 26 },
@@ -511,6 +513,7 @@
     context.drawImage(state.assets.reference,
       rightRailX, PAGE_TOP, WIDTH - rightRailX, HEIGHT - PAGE_TOP,
       rightRailX, PAGE_TOP, WIDTH - rightRailX, HEIGHT - PAGE_TOP);
+    drawPageScrollbar(context, page);
     if (page !== "profile") return;
 
     // Reuse the PSD tab artwork. A color blend moves the active treatment from
@@ -531,6 +534,29 @@
         10, 14, 172, 64,
         1050, 155, 253, 94);
     }
+  }
+
+  function drawPageScrollbar(context, page) {
+    const track = PAGE_SCROLLBAR_TRACK;
+    const thumb = PAGE_SCROLLBAR_THUMB;
+    const maximum = pageMaxOffset(page);
+    const offset = Math.min(maximum, Math.max(0, state.pageOffsets[page] || 0));
+    const progress = maximum > 0 ? offset / maximum : 0;
+    const thumbY = track.y + progress * (track.height - thumb.height);
+
+    // Remove the thumb baked into the reference screenshot, keep the track
+    // fixed, then reuse the original thumb pixels at the matching page offset.
+    context.drawImage(state.assets.background,
+      thumb.x, PAGE_TOP, thumb.width, HEIGHT - PAGE_TOP,
+      thumb.x, PAGE_TOP, thumb.width, HEIGHT - PAGE_TOP);
+    context.save();
+    context.strokeStyle = "rgb(211 225 226 / 78%)";
+    context.lineWidth = 2;
+    context.strokeRect(track.x + 1, track.y + 1, track.width - 2, track.height - 2);
+    context.drawImage(state.assets.reference,
+      thumb.x, thumb.y, thumb.width, thumb.height,
+      thumb.x, Math.round(thumbY), thumb.width, thumb.height);
+    context.restore();
   }
 
   function drawRightPage(context, page) {

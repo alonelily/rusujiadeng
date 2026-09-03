@@ -7066,6 +7066,14 @@ footer a:hover {
     display: block;
   }
 
+  .servant-card-preview-column {
+    position: sticky;
+    z-index: 12;
+    top: max(6px, env(safe-area-inset-top));
+    padding-bottom: 6px;
+    background: #eef1ef;
+  }
+
   .servant-card-page-tabs {
     display: grid;
   }
@@ -7079,7 +7087,7 @@ footer a:hover {
   }
 
   .servant-card-preview-note {
-    text-align: left;
+    display: none;
   }
 
   .servant-skill-search {
