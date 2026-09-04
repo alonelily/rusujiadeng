@@ -407,6 +407,7 @@
                   </div>
                   <div class="story-flow-add-actions">
                     <button class="icon-button story-add-dialogue-button" id="storyAddDialogueButton" type="button" title="新增对话" aria-label="新增对话">+</button>
+                    <button class="icon-button story-add-shot-segment-button" id="storyAddShotSegmentButton" type="button" title="新增纯镜头" aria-label="新增纯镜头">○</button>
                     <button class="icon-button story-add-choice-segment-button" id="storyAddChoiceSegmentButton" type="button" title="新增选项镜头" aria-label="新增选项镜头">◇</button>
                   </div>
                 </div>
@@ -625,6 +626,16 @@
                   <small class="story-choice-editor-hint">选项显示在前一段对话框上方；结束前会自动播放已选项的弹出效果和点击音效。</small>
                   <div class="story-choice-list" id="storyChoiceList"></div>
                   <button class="secondary-button story-choice-add-button" id="storyAddChoiceButton" type="button">添加选项</button>
+                </section>
+
+                <section class="story-shot-editor" id="storyShotEditor" aria-labelledby="storyShotTitle" hidden>
+                  <div class="story-choice-editor-heading">
+                    <strong id="storyShotTitle">纯镜头</strong>
+                    <label class="story-choice-duration-field">
+                      <span>停留时长（秒）</span>
+                      <input id="storyShotDurationInput" type="number" min="1" max="120" step="0.1" value="3" />
+                    </label>
+                  </div>
                 </section>
 
                 <div class="story-properties" id="storyDialogueProperties">
@@ -899,6 +910,7 @@
                   <label class="servant-card-field"><span>ATK</span><input id="servantCardAtk" type="number" min="0" max="99999" value="12499" /></label>
                   <label class="servant-card-field"><span>HP</span><input id="servantCardHp" type="number" min="0" max="99999" value="14770" /></label>
                 </div>
+                <label class="servant-card-field"><span>消耗（COST）</span><input id="servantCardCost" type="number" min="0" max="999" value="16" /></label>
                 <button class="secondary-button" id="servantCardArtButton" type="button">选择从者立绘</button>
                 <input id="servantCardArtInput" type="file" accept="image/png,image/jpeg,image/webp" hidden />
                 <span class="servant-card-file-name" id="servantCardArtName">PSD 模板示例</span>
@@ -1285,8 +1297,8 @@
     <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
     <script src="story-picker.js?v=20260825-picker-reset-1" defer></script>
     <script src="story-resource-catalog.js?v=20260830-story-index-1" defer></script>
-    <script src="craft-essence-editor.js?v=20260904-adaptive-text-export-1" defer></script>
-    <script src="servant-card-editor.js?v=20260904-android-export-1" defer></script>
+    <script src="craft-essence-editor.js?v=20260905-art-export-state-1" defer></script>
+    <script src="servant-card-editor.js?v=20260905-cost-full-export-1" defer></script>
     <script src="story-renderer.js?v=20260904-choice-layer-fade-5" defer></script>
     <script src="app.js?v=20260904-card-export-1" defer></script>
   </body>

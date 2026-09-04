@@ -277,6 +277,7 @@
     nobleDetail: DEFAULT_NOBLE_DETAIL,
     atk: 12499,
     hp: 14770,
+    cost: 16,
     artScale: 100,
     artX: 0,
     artY: 0,
@@ -1057,9 +1058,8 @@
   function drawAbilityOverlay(context) {
     const artRect = ABILITY_ART_RECT;
 
-    // Restore the complete original PSD metadata block. Level, stars, cost,
-    // labels, reinforcement values and ornaments are not editable and should
-    // therefore remain original artwork rather than Canvas approximations.
+    // Restore the original PSD metadata block before replacing editable stats.
+    // Level, stars, labels, reinforcement values and ornaments stay untouched.
     context.drawImage(state.assets.abilityReference,
       350, 0, 724, 580,
       350, 0, 724, 580);
@@ -1085,8 +1085,10 @@
     // the clear patch tight prevents a visible rectangle in the textured page.
     context.drawImage(state.assets.abilityPage, 444, 180, 112, 42, 444, 180, 112, 42);
     context.drawImage(state.assets.abilityPage, 734, 180, 118, 42, 734, 180, 118, 42);
+    context.drawImage(state.assets.abilityPage, 992, 180, 70, 42, 992, 180, 70, 42);
     drawAbilityStat(context, state.hp.toLocaleString(), 446, 214, 36);
     drawAbilityStat(context, state.atk.toLocaleString(), 736, 214, 36);
+    drawAbilityStat(context, state.cost.toLocaleString(), 1005, 214, 30, "#ece9e1");
 
     drawSkillRows(context, "active", state.skills);
 
@@ -1325,6 +1327,7 @@
     state.nobleDetail = dom.nobleDetail.value;
     state.atk = Math.max(0, Math.min(99999, Number(dom.atk.value) || 0));
     state.hp = Math.max(0, Math.min(99999, Number(dom.hp.value) || 0));
+    state.cost = Math.max(0, Math.min(999, Number(dom.cost.value) || 0));
     state.artScale = Number(dom.artScale.value) || 100;
     state.artX = Number(dom.artX.value) || 0;
     state.artY = Number(dom.artY.value) || 0;
@@ -1744,6 +1747,7 @@
     dom.nobleDetail.value = state.nobleDetail;
     dom.atk.value = String(state.atk);
     dom.hp.value = String(state.hp);
+    dom.cost.value = String(state.cost);
     dom.profile.value = state.profileSections[state.activeProfileSection];
     dom.profileSectionSelect.value = state.activeProfileSection;
     dom.profileStats.forEach((control) => {
@@ -1821,22 +1825,59 @@
     if (!state.ready || dom.exportAllButton.disabled) return;
     dom.exportAllButton.disabled = true;
     const original = dom.exportAllButton.textContent;
-    dom.exportAllButton.textContent = "正在打包";
+    const previewBeforeExport = {
+      page: state.page,
+      controlTab: state.controlTab,
+      pageOffsets: { ...state.pageOffsets }
+    };
+    dom.exportAllButton.textContent = "正在准备";
     try {
-      render("ability");
-      const ability = await canvasBlob();
-      render("profile");
-      const profile = await canvasBlob();
       const base = sanitizedName();
-      const zip = await createStoredZip([
-        { filename: `${base}-能力.png`, blob: ability },
-        { filename: `${base}-资料.png`, blob: profile }
-      ]);
+      const capturePlan = ["ability", "profile"].flatMap((page) => {
+        const maximum = pageMaxOffset(page);
+        const step = Math.max(1, Math.floor(pageVisibleSourceHeight(page)));
+        const offsets = [0];
+        for (let offset = step; offset < maximum; offset += step) offsets.push(offset);
+        if (maximum > 0 && offsets[offsets.length - 1] !== maximum) offsets.push(maximum);
+        return offsets.map((offset, index) => ({ page, offset, index, total: offsets.length }));
+      });
+      const entries = [];
+      for (let index = 0; index < capturePlan.length; index += 1) {
+        const item = capturePlan[index];
+        state.page = item.page;
+        state.pageOffsets[item.page] = item.offset;
+        dom.pageButtons.forEach((button) => {
+          const active = button.dataset.servantCardPage === item.page;
+          button.classList.toggle("is-active", active);
+          button.setAttribute("aria-pressed", String(active));
+        });
+        dom.abilityTabs.hidden = item.page !== "ability";
+        updatePageOffsetControl();
+        render(item.page);
+        dom.exportAllButton.textContent = `正在导出 ${index + 1}/${capturePlan.length}`;
+        setStatus(`正在采集${item.page === "profile" ? "资料" : "能力"}页窗口 ${item.index + 1}/${item.total}`);
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        entries.push({
+          filename: `${base}-${item.page === "profile" ? "资料" : "能力"}-${String(item.index + 1).padStart(2, "0")}.png`,
+          blob: await canvasBlob()
+        });
+      }
+      const zip = await createStoredZip(entries);
       await downloadBlob(zip, `${base}-从者卡套图.zip`);
-      setStatus(`两张页面已打包 · ${(zip.size / 1024 / 1024).toFixed(1)} MB`);
+      setStatus(`${entries.length} 个窗口已打包 · ${(zip.size / 1024 / 1024).toFixed(1)} MB`);
     } catch (error) {
       setStatus(error.message || "套图导出失败", true);
     } finally {
+      state.page = previewBeforeExport.page;
+      state.pageOffsets = previewBeforeExport.pageOffsets;
+      setControlTab(previewBeforeExport.controlTab);
+      dom.pageButtons.forEach((button) => {
+        const active = button.dataset.servantCardPage === state.page;
+        button.classList.toggle("is-active", active);
+        button.setAttribute("aria-pressed", String(active));
+      });
+      dom.abilityTabs.hidden = state.page !== "ability";
+      updatePageOffsetControl();
       dom.exportAllButton.disabled = false;
       dom.exportAllButton.textContent = original;
       render();
@@ -1928,7 +1969,7 @@
       setControlTab(tab);
       focusControlTab(tab);
     }));
-    [dom.name, dom.title, dom.className, dom.rarity, dom.atk, dom.hp, dom.artScale, dom.artX, dom.artY,
+    [dom.name, dom.title, dom.className, dom.rarity, dom.atk, dom.hp, dom.cost, dom.artScale, dom.artX, dom.artY,
       dom.abilityArtScale, dom.abilityArtX, dom.abilityArtY, dom.nobleCardName,
       dom.nobleCardSubtitle, dom.nobleCardType, dom.nobleRank, dom.nobleType,
       dom.nobleDetail, dom.profile,
@@ -2019,6 +2060,7 @@
       nobleDetail: document.getElementById("servantNobleDetail"),
       atk: document.getElementById("servantCardAtk"),
       hp: document.getElementById("servantCardHp"),
+      cost: document.getElementById("servantCardCost"),
       artButton: document.getElementById("servantCardArtButton"),
       artInput: document.getElementById("servantCardArtInput"),
       artName: document.getElementById("servantCardArtName"),

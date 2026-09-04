@@ -3,7 +3,7 @@
 
   const WIDTH = 1920;
   const HEIGHT = 1080;
-  const ART_RECT = { x: 116, y: 11, width: 620, height: 1028, radius: 43 };
+  const ART_RECT = { x: 116, y: 11, width: 620, height: 1059, radius: 43 };
   const DEFAULT_CARD_NAME = "那时那日所见风景";
   const DEFAULT_DESCRIPTION = [
     "“好久没来姥爷家了，",
@@ -356,8 +356,10 @@
     } catch (error) {
       setStatus(error.message || "PNG 导出失败", true);
     } finally {
+      dom.canvas.removeAttribute("aria-busy");
       dom.exportButton.disabled = false;
       dom.exportButton.textContent = originalLabel;
+      scheduleRender();
     }
   }
 
@@ -419,8 +421,14 @@
     init();
     dom.panel.hidden = false;
     document.querySelector(".app-shell").classList.add("is-craft-essence-open");
-    dom.canvas.setAttribute("aria-busy", "true");
-    setStatus("正在读取礼装模板");
+    if (state.ready) {
+      dom.canvas.removeAttribute("aria-busy");
+      setStatus("礼装模板已就绪 · 1920 × 1080 · PNG");
+      scheduleRender();
+    } else {
+      dom.canvas.setAttribute("aria-busy", "true");
+      setStatus("正在读取礼装模板");
+    }
     ensureReady().catch(() => {});
   }
 

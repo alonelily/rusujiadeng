@@ -326,6 +326,7 @@
     storyDialogueSummary: document.getElementById("storyDialogueSummary"),
     storyAddDialogueButton: document.getElementById("storyAddDialogueButton"),
     storyAddChoiceSegmentButton: document.getElementById("storyAddChoiceSegmentButton"),
+    storyAddShotSegmentButton: document.getElementById("storyAddShotSegmentButton"),
     storyCastPanel: document.getElementById("storyCastPanel"),
     storyDialogueVariantsPanel: document.getElementById("storyDialogueVariantsPanel"),
     storyDialogueVariantsSummary: document.getElementById("storyDialogueVariantsSummary"),
@@ -333,6 +334,8 @@
     storyChoicesSummary: document.getElementById("storyChoicesSummary"),
     storyChoiceList: document.getElementById("storyChoiceList"),
     storyChoiceEditor: document.getElementById("storyChoiceEditor"),
+    storyShotEditor: document.getElementById("storyShotEditor"),
+    storyShotDurationInput: document.getElementById("storyShotDurationInput"),
     storyAddChoiceButton: document.getElementById("storyAddChoiceButton"),
     storyChoiceDurationInput: document.getElementById("storyChoiceDurationInput"),
     storySpeakerInput: document.getElementById("storySpeakerInput"),
@@ -3416,6 +3419,18 @@
     return Boolean(segment && segment.kind === "choice");
   }
 
+  function isStoryShotSegment(segment) {
+    return Boolean(segment && segment.kind === "shot");
+  }
+
+  function isStoryDialogueSegment(segment) {
+    return Boolean(segment && !isStoryChoiceSegment(segment) && !isStoryShotSegment(segment));
+  }
+
+  function requiresStoryDialogueText(segment) {
+    return isStoryDialogueSegment(segment) && segment.showBox !== false;
+  }
+
   function createStoryChoiceSegment(value = {}) {
     const options = normalizeStoryOptions(value.options);
     const fallbackOptions = options.length ? options : [
@@ -3431,6 +3446,21 @@
       duration: normalizeStoryChoiceDuration(value.duration),
       options: fallbackOptions,
       selectedOptionId: selected
+    };
+  }
+
+  function createStoryShotSegment(value = {}) {
+    return {
+      id: String(value.id || `shot-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`),
+      kind: "shot",
+      duration: Math.max(1, Math.min(120, Number(value.duration) || 3)),
+      showBox: false,
+      actorId: null,
+      speaker: "",
+      text: "",
+      hiddenActorIds: normalizeStoryHiddenActorIds(value.hiddenActorIds),
+      actorVariants: normalizeStoryDialogueVariants(value.actorVariants),
+      actorColorModes: normalizeStoryDialogueColorModes(value.actorColorModes)
     };
   }
 
@@ -3962,9 +3992,11 @@
         const rawDialogues = Array.isArray(scene.dialogues) && scene.dialogues.length
           ? scene.dialogues
           : [legacyDialogue];
-        const dialogues = rawDialogues.map((dialogue) => isStoryChoiceSegment(dialogue)
-          ? createStoryChoiceSegment(dialogue)
-          : createStoryDialogue(dialogue));
+        const dialogues = rawDialogues.map((dialogue) => {
+          if (isStoryChoiceSegment(dialogue)) return createStoryChoiceSegment(dialogue);
+          if (isStoryShotSegment(dialogue)) return createStoryShotSegment(dialogue);
+          return createStoryDialogue(dialogue);
+        });
         const hasChoiceSegment = dialogues.some(isStoryChoiceSegment);
         const legacyOptions = normalizeStoryOptions(scene.options);
         if (!hasChoiceSegment && legacyOptions.length) {
@@ -3975,7 +4007,7 @@
           }));
         }
         dialogues.forEach((dialogue) => {
-          if (!isStoryChoiceSegment(dialogue)) ensureStoryDialogueTypewriterDuration(dialogue);
+          if (isStoryDialogueSegment(dialogue)) ensureStoryDialogueTypewriterDuration(dialogue);
         });
         const activeDialogue = dialogues.find((dialogue) => dialogue.id === scene.activeDialogueId) || dialogues[0];
         return {
@@ -4926,29 +4958,35 @@
     const index = state.story.project.scenes.indexOf(scene);
     const dialogue = getActiveStoryDialogue(scene);
     const choiceActive = isStoryChoiceSegment(dialogue);
+    const shotActive = isStoryShotSegment(dialogue);
+    const textActive = isStoryDialogueSegment(dialogue);
     dom.storyActiveSceneLabel.textContent = `分镜 ${index + 1} / ${state.story.project.scenes.length}`;
-    dom.storySpeakerInput.value = choiceActive ? "" : (dialogue.speaker || "");
+    dom.storySpeakerInput.value = textActive ? (dialogue.speaker || "") : "";
     dom.storySpeakerInput.readOnly = Boolean(dialogue.actorId);
-    dom.storySpeakerInput.title = dialogue.actorId
+    dom.storySpeakerInput.title = !textActive
+      ? "纯镜头和选项镜头不使用发言人物"
+      : dialogue.actorId
       ? "人物名称请在人物通用选项中修改"
       : "旁白名称可选，留空时不显示姓名栏";
-    dom.storyDialogueInput.value = choiceActive ? "" : (dialogue.text || "");
-    dom.storyDialogueShowBoxInput.checked = !choiceActive && dialogue.showBox !== false;
-    if (!choiceActive) {
+    dom.storyDialogueInput.value = textActive ? (dialogue.text || "") : "";
+    dom.storyDialogueShowBoxInput.checked = textActive && dialogue.showBox !== false;
+    if (textActive) {
       updateStoryDialogueColorControls(dialogue);
       updateStoryDialogueTimingControls(dialogue);
     }
     dom.storyDurationInput.value = String(dialogue.duration);
-    if (dom.storyCastPanel) dom.storyCastPanel.hidden = choiceActive;
+    if (dom.storyCastPanel) dom.storyCastPanel.hidden = !textActive;
     if (dom.storyDialogueVariantsPanel) dom.storyDialogueVariantsPanel.hidden = choiceActive || !scene.actors.length;
-    if (dom.storyDialogueProperties) dom.storyDialogueProperties.hidden = choiceActive;
+    if (dom.storyDialogueProperties) dom.storyDialogueProperties.hidden = !textActive;
+    if (dom.storyShotEditor) dom.storyShotEditor.hidden = !shotActive;
+    if (shotActive && dom.storyShotDurationInput) dom.storyShotDurationInput.value = String(dialogue.duration);
     dom.storyDeleteSceneButton.disabled = state.story.project.scenes.length <= 1;
     dom.storyActorToolCount.textContent = String(scene.actors.length);
     dom.storyDialogueToolCount.textContent = String(getStoryDialogues(scene).length);
     dom.storyAnimationToolCount.textContent = String(scene.actors.length);
     dom.storySidebarDialogueCount.textContent = String(getStoryDialogues(scene).length);
     renderStoryDialogueList(scene);
-    if (!choiceActive) renderStoryActorList(scene);
+    if (textActive) renderStoryActorList(scene);
     renderStoryAnimationOptions(scene);
     if (!choiceActive) renderStoryDialogueVariantControls(scene);
     renderStoryChoiceControls(scene);
@@ -5007,6 +5045,7 @@
       const item = document.createElement("div");
       item.className = "story-dialogue-item";
       item.classList.toggle("is-choice", isStoryChoiceSegment(dialogue));
+      item.classList.toggle("is-shot", isStoryShotSegment(dialogue));
       item.dataset.dialogueId = dialogue.id;
       item.classList.toggle("is-active", dialogue.id === activeDialogue.id);
 
@@ -5025,11 +5064,15 @@
       const excerpt = document.createElement("small");
       if (isStoryChoiceSegment(dialogue)) {
         speaker.textContent = "选项";
+      } else if (isStoryShotSegment(dialogue)) {
+        speaker.textContent = "纯镜头";
       }
       excerpt.textContent = dialogue.text || "尚未填写台词";
       copy.append(speaker, excerpt);
       if (isStoryChoiceSegment(dialogue)) {
         excerpt.textContent = `${dialogue.options.length} 项选项`;
+      } else if (isStoryShotSegment(dialogue)) {
+        excerpt.textContent = "仅展示背景与人物";
       }
       const duration = document.createElement("small");
       duration.className = "story-dialogue-duration";
@@ -5041,7 +5084,7 @@
       remove.className = "story-dialogue-remove";
       remove.type = "button";
       remove.disabled = dialogues.length <= 1;
-      remove.title = dialogues.length <= 1 ? "至少保留一段对话" : `删除对话 ${index + 1}`;
+      remove.title = dialogues.length <= 1 ? "至少保留一个流程片段" : `删除流程片段 ${index + 1}`;
       remove.setAttribute("aria-label", remove.title);
       remove.textContent = "×";
       remove.addEventListener("click", () => removeStoryDialogue(scene, dialogue.id));
@@ -5063,10 +5106,14 @@
     const duration = item.querySelector(".story-dialogue-duration");
     const variantCount = Object.keys(dialogue.actorVariants || {}).length;
     if (speaker) {
-      speaker.textContent = dialogue.speaker || "旁白";
+      speaker.textContent = isStoryChoiceSegment(dialogue)
+        ? "选项"
+        : isStoryShotSegment(dialogue) ? "纯镜头" : (dialogue.speaker || "旁白");
     }
     if (excerpt) {
-      excerpt.textContent = dialogue.text || "尚未填写台词";
+      excerpt.textContent = isStoryChoiceSegment(dialogue)
+        ? `${dialogue.options.length} 项选项`
+        : isStoryShotSegment(dialogue) ? "仅展示背景与人物" : (dialogue.text || "尚未填写台词");
     }
     if (duration) {
       duration.textContent = variantCount ? `${dialogue.duration}s · ${variantCount}差分` : `${dialogue.duration}s`;
@@ -5082,7 +5129,7 @@
       return;
     }
     const dialogueIndex = getStoryDialogues(scene).indexOf(dialogue);
-    dom.storyDialogueVariantsSummary.textContent = `对话 ${String(dialogueIndex + 1).padStart(2, "0")}`;
+    dom.storyDialogueVariantsSummary.textContent = `${isStoryShotSegment(dialogue) ? "镜头" : "对话"} ${String(dialogueIndex + 1).padStart(2, "0")}`;
     scene.actors.forEach((actor, actorIndex) => {
       const variant = getStoryDialogueActorVariant(dialogue, actor.assetId);
       const activeAsset = variant || actor;
@@ -5325,6 +5372,28 @@
     dom.storyChoiceList.querySelector(".story-choice-input")?.focus();
   }
 
+  function addStoryShotSegment() {
+    const scene = getActiveStoryScene();
+    if (!scene) return;
+    const segments = getStoryDialogues(scene);
+    const current = getActiveStoryDialogue(scene);
+    const visualSource = isStoryChoiceSegment(current) ? getStoryPreviousDialogue(scene, current) : current;
+    const shot = createStoryShotSegment({
+      duration: visualSource && visualSource.duration,
+      hiddenActorIds: visualSource && visualSource.hiddenActorIds,
+      actorVariants: visualSource && visualSource.actorVariants,
+      actorColorModes: visualSource && visualSource.actorColorModes
+    });
+    const index = Math.max(0, segments.indexOf(current));
+    segments.splice(index + 1, 0, shot);
+    scene.activeDialogueId = shot.id;
+    scene.dialogue = shot;
+    syncStorySceneDuration(scene);
+    saveStoryProject();
+    renderStoryEditor();
+    dom.storyShotDurationInput?.focus();
+  }
+
   function updateStoryDialogueActorColorMode(actorId, value) {
     const scene = getActiveStoryScene();
     const dialogue = scene && getActiveStoryDialogue(scene);
@@ -5356,25 +5425,22 @@
     if (!scene) {
       return;
     }
+    const segments = getStoryDialogues(scene);
     const current = getActiveStoryDialogue(scene);
-    const actor = scene.actors.find((item) => item.assetId === current.actorId) || scene.actors[0] || null;
+    const visualSource = isStoryChoiceSegment(current) ? getStoryPreviousDialogue(scene, current) : current;
+    const actor = scene.actors.find((item) => item.assetId === visualSource?.actorId) || scene.actors[0] || null;
     const actorIndex = actor ? scene.actors.indexOf(actor) : -1;
     const dialogue = createStoryDialogue({
       actorId: actor ? actor.assetId : null,
       speaker: actor ? getStoryActorDisplayName(actor, actorIndex) : "",
-      duration: current.duration,
-      typewriter: current.typewriter,
-      typewriterSpeed: current.typewriterSpeed,
-      textSpeedRanges: current.textSpeedRanges,
-      textColorRanges: current.textColorRanges,
-      textFontSizeRanges: current.textFontSizeRanges,
-      textRubyRanges: current.textRubyRanges,
-      actorVariants: current.actorVariants,
-      actorColorModes: current.actorColorModes,
-      showBox: current.showBox,
-      hiddenActorIds: current.hiddenActorIds
+      duration: visualSource?.duration,
+      typewriterSpeed: visualSource?.typewriterSpeed,
+      actorVariants: visualSource?.actorVariants,
+      actorColorModes: visualSource?.actorColorModes,
+      hiddenActorIds: visualSource?.hiddenActorIds
     });
-    getStoryDialogues(scene).push(dialogue);
+    const index = Math.max(0, segments.indexOf(current));
+    segments.splice(index + 1, 0, dialogue);
     scene.activeDialogueId = dialogue.id;
     scene.dialogue = dialogue;
     syncStorySceneDuration(scene);
@@ -5466,6 +5532,9 @@
       return;
     }
     const dialogue = getActiveStoryDialogue(scene);
+    if (!isStoryDialogueSegment(dialogue)) {
+      return;
+    }
     const actor = scene.actors.find((item) => item.assetId === dom.storySpeakerActorSelect.value) || null;
     dialogue.actorId = actor ? actor.assetId : null;
     dialogue.speaker = actor ? getStoryActorDisplayName(actor, scene.actors.indexOf(actor)) : "";
@@ -6339,6 +6408,9 @@
       return;
     }
     const dialogue = getActiveStoryDialogue(scene);
+    if (!isStoryDialogueSegment(dialogue)) {
+      return;
+    }
     if (field === "speaker" && dialogue.actorId) {
       const actor = scene.actors.find((item) => item.assetId === dialogue.actorId);
       dialogue.speaker = actor ? getStoryActorDisplayName(actor, scene.actors.indexOf(actor)) : value;
@@ -6393,7 +6465,7 @@
   function updateStoryDialogueShowBox() {
     const scene = getActiveStoryScene();
     const dialogue = scene && getActiveStoryDialogue(scene);
-    if (!scene || !dialogue) return;
+    if (!scene || !dialogue || !isStoryDialogueSegment(dialogue)) return;
     dialogue.showBox = Boolean(dom.storyDialogueShowBoxInput.checked);
     saveStoryProject();
     renderStoryCanvas(scene, 1);
@@ -8299,8 +8371,10 @@
     state.story.selectedActorByScene.set(scene.id, actor.assetId);
     scene.selectedActorId = actor.assetId;
     const dialogue = getActiveStoryDialogue(scene);
-    dialogue.actorId = actor.assetId;
-    dialogue.speaker = actor.characterName;
+    if (isStoryDialogueSegment(dialogue)) {
+      dialogue.actorId = actor.assetId;
+      dialogue.speaker = actor.characterName;
+    }
     saveStoryProject();
     renderStoryEditor();
     const sameCharacterCount = scene.actors.filter((item) => item.sourceCharacterId === characterId).length;
@@ -8461,29 +8535,37 @@
       const dialogue = dialogues[dialogueIndex];
       const dialogueProgress = Math.min(1, Math.max(0, (elapsed - dialogueStart) / dialogue.duration));
       const choiceActive = isStoryChoiceSegment(dialogue);
+      const shotActive = isStoryShotSegment(dialogue);
+      const textActive = isStoryDialogueSegment(dialogue);
       const previousDialogue = choiceActive ? getStoryPreviousDialogue(scene, dialogue) : (dialogueIndex > 0 ? dialogues[dialogueIndex - 1] : null);
       if (playbackDialogueId !== dialogue.id) {
         playbackDialogueId = dialogue.id;
         scene.activeDialogueId = dialogue.id;
         scene.dialogue = dialogue;
-        dom.storySpeakerInput.value = choiceActive ? "" : (dialogue.speaker || "");
+        dom.storySpeakerInput.value = textActive ? (dialogue.speaker || "") : "";
         dom.storySpeakerInput.readOnly = Boolean(dialogue.actorId);
-        dom.storySpeakerInput.title = dialogue.actorId
+        dom.storySpeakerInput.title = !textActive
+          ? "纯镜头和选项镜头不使用发言人物"
+          : dialogue.actorId
           ? "人物名称请在人物通用选项中修改"
           : "旁白名称可选，留空时不显示姓名栏";
-        dom.storyDialogueInput.value = choiceActive ? "" : (dialogue.text || "");
-        dom.storyDialogueShowBoxInput.checked = !choiceActive && dialogue.showBox !== false;
-        if (!choiceActive) {
+        dom.storyDialogueInput.value = textActive ? (dialogue.text || "") : "";
+        dom.storyDialogueShowBoxInput.checked = textActive && dialogue.showBox !== false;
+        if (textActive) {
           updateStoryDialogueColorControls(dialogue);
           updateStoryDialogueTimingControls(dialogue);
         }
         dom.storyDurationInput.value = String(dialogue.duration);
-        if (dom.storyCastPanel) dom.storyCastPanel.hidden = choiceActive;
+        if (dom.storyCastPanel) dom.storyCastPanel.hidden = !textActive;
         if (dom.storyDialogueVariantsPanel) dom.storyDialogueVariantsPanel.hidden = choiceActive || !scene.actors.length;
-        if (dom.storyDialogueProperties) dom.storyDialogueProperties.hidden = choiceActive;
+        if (dom.storyDialogueProperties) dom.storyDialogueProperties.hidden = !textActive;
+        if (dom.storyShotEditor) dom.storyShotEditor.hidden = !shotActive;
+        if (shotActive && dom.storyShotDurationInput) dom.storyShotDurationInput.value = String(dialogue.duration);
         renderStoryDialogueList(scene);
-        if (!choiceActive) {
+        if (textActive) {
           renderStoryActorList(scene);
+        }
+        if (!choiceActive) {
           renderStoryDialogueVariantControls(scene);
         }
         renderStoryChoiceControls(scene);
@@ -8548,8 +8630,12 @@
     return state.story.project.scenes.findIndex((scene) => {
       return !scene.background || (requireAssetUrls && !scene.background.url) ||
         (requireAssetUrls && scene.actors.some((actor) => !actor.url)) ||
-        getStoryDialogues(scene).some((dialogue) => !isStoryChoiceSegment(dialogue) && (!String(dialogue.text || "").trim() ||
-          (requireAssetUrls && Object.values(dialogue.actorVariants || {}).some((variant) => !variant.url))));
+        getStoryDialogues(scene).some((dialogue) => (
+          requiresStoryDialogueText(dialogue) && !String(dialogue.text || "").trim()
+        ) || (
+          requireAssetUrls && !isStoryChoiceSegment(dialogue) &&
+          Object.values(dialogue.actorVariants || {}).some((variant) => !variant.url)
+        ));
     });
   }
 
@@ -8559,7 +8645,9 @@
     const missing = [
       !scene.background || (requireAssetUrls && !scene.background.url) ? "剧情背景" : null,
       (requireAssetUrls && scene.actors.some((actor) => !actor.url)) ? "剧情人物和表情" : null,
-      getStoryDialogues(scene).some((dialogue) => !String(dialogue.text || "").trim()) ? "完整对话内容" : null
+      getStoryDialogues(scene).some((dialogue) => (
+        requiresStoryDialogueText(dialogue) && !String(dialogue.text || "").trim()
+      )) ? "完整对话内容" : null
     ].filter(Boolean);
     state.story.activeSceneId = scene.id;
     renderStoryEditor();
@@ -9696,11 +9784,11 @@
 
   function getStoryProjectRecordSummary(record) {
     const project = normalizeStoryProject(record.project);
-    const dialogueCount = project.scenes.reduce((total, scene) => total + getStoryDialogues(scene).length, 0);
+    const segmentCount = project.scenes.reduce((total, scene) => total + getStoryDialogues(scene).length, 0);
     return {
       title: record.title || project.title || "未命名剧情",
       sceneCount: project.scenes.length,
-      dialogueCount,
+      segmentCount,
       updatedAt: record.updatedAt ? dateFormatter.format(new Date(record.updatedAt)) : "未知时间"
     };
   }
@@ -9732,7 +9820,7 @@
       const title = document.createElement("strong");
       title.textContent = summary.title;
       const meta = document.createElement("span");
-      meta.textContent = `${summary.sceneCount} 个分镜 · ${summary.dialogueCount} 段对话 · ${summary.updatedAt}`;
+      meta.textContent = `${summary.sceneCount} 个分镜 · ${summary.segmentCount} 个流程片段 · ${summary.updatedAt}`;
       copy.append(title, meta);
       const actions = document.createElement("div");
       actions.className = "story-project-library-actions";
@@ -10189,6 +10277,7 @@
     dom.storyPlayButton.addEventListener("click", playStoryScene);
     dom.storyAddDialogueButton.addEventListener("click", addStoryDialogue);
     dom.storyAddChoiceSegmentButton?.addEventListener("click", addStoryChoiceSegment);
+    dom.storyAddShotSegmentButton?.addEventListener("click", addStoryShotSegment);
     dom.storyAspectSelect.addEventListener("change", updateStoryAspect);
     dom.storyFontSelect.addEventListener("change", updateStoryFont);
     dom.storyDialogueFontSizeInput.addEventListener("input", updateStoryDialogueFontSize);
@@ -10212,6 +10301,18 @@
       saveStoryProject();
       renderStoryDialogueList(scene);
       renderStoryCanvas(scene, 1, choice);
+    });
+    dom.storyShotDurationInput?.addEventListener("change", () => {
+      const scene = getActiveStoryScene();
+      const shot = scene && getActiveStoryDialogue(scene);
+      if (!shot || !isStoryShotSegment(shot)) return;
+      shot.duration = Math.max(1, Math.min(120, Number(dom.storyShotDurationInput.value) || 3));
+      dom.storyShotDurationInput.value = String(shot.duration);
+      syncStorySceneDuration(scene);
+      saveStoryProject();
+      renderStoryDialogueList(scene);
+      renderStorySceneList();
+      renderStoryCanvas(scene, 1, shot);
     });
     dom.storyAddChoiceButton.addEventListener("click", addStoryChoice);
     dom.storyCanvas.addEventListener("click", (event) => {

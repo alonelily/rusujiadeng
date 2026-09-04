@@ -2415,6 +2415,19 @@ footer a:hover {
   min-width: 0;
 }
 
+.storyboard-heading > .story-flow-add-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 5px;
+}
+
+.story-flow-add-actions .icon-button {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+}
+
 .storyboard-heading span {
   color: var(--text-dim);
   font-size: 11px;
@@ -3115,6 +3128,15 @@ footer a:hover {
   color: var(--gold);
 }
 
+.story-dialogue-item.is-shot {
+  border-color: rgb(101 190 187 / 55%);
+  background: rgb(101 190 187 / 6%);
+}
+
+.story-dialogue-item.is-shot .story-dialogue-number {
+  color: #65bebb;
+}
+
 .story-dialogue-select,
 .story-dialogue-remove {
   border: 0;
@@ -3344,14 +3366,16 @@ footer a:hover {
   accent-color: var(--cyan);
 }
 
-.story-choice-editor {
+.story-choice-editor,
+.story-shot-editor {
   display: grid;
   gap: 10px;
   padding: 14px 0;
   border-bottom: 1px solid var(--border);
 }
 
-.story-choice-editor[hidden] {
+.story-choice-editor[hidden],
+.story-shot-editor[hidden] {
   display: none;
 }
 
@@ -3537,6 +3561,10 @@ footer a:hover {
   display: grid;
   gap: 14px;
   padding: 16px 0;
+}
+
+.story-properties[hidden] {
+  display: none;
 }
 
 .story-property-grid {
