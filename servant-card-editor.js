@@ -1783,7 +1783,11 @@
     return (state.name.trim() || "自制从者").replace(/[\\/:*?"<>|]/g, "_").slice(0, 60);
   }
 
-  function downloadBlob(blob, filename) {
+  async function downloadBlob(blob, filename) {
+    if (typeof window.FgoNativeFileSaver?.saveBlob === "function") {
+      await window.FgoNativeFileSaver.saveBlob(blob, filename, "保存或分享自制从者卡");
+      return;
+    }
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
@@ -1802,7 +1806,7 @@
     try {
       render(state.page);
       const blob = await canvasBlob();
-      downloadBlob(blob, `${sanitizedName()}-${state.page === "profile" ? "资料" : "能力"}.png`);
+      await downloadBlob(blob, `${sanitizedName()}-${state.page === "profile" ? "资料" : "能力"}.png`);
       setStatus(`当前页面已生成 · ${(blob.size / 1024 / 1024).toFixed(1)} MB`);
     } catch (error) {
       setStatus(error.message || "PNG 导出失败", true);
@@ -1828,7 +1832,7 @@
         { filename: `${base}-能力.png`, blob: ability },
         { filename: `${base}-资料.png`, blob: profile }
       ]);
-      downloadBlob(zip, `${base}-从者卡套图.zip`);
+      await downloadBlob(zip, `${base}-从者卡套图.zip`);
       setStatus(`两张页面已打包 · ${(zip.size / 1024 / 1024).toFixed(1)} MB`);
     } catch (error) {
       setStatus(error.message || "套图导出失败", true);

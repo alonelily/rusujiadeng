@@ -204,9 +204,22 @@
     setOutlinedTextStyle(context, `${upperSize}px "FgoCeText", sans-serif`, 5);
     drawOutlinedText(context, upper, 797, 392);
 
-    setOutlinedTextStyle(context, '40px "FgoCeText", sans-serif', 5);
-    const lines = wrapText(context, state.lowerText, 1002).slice(0, 8);
-    const lineHeight = 51;
+    const description = state.lowerText || " ";
+    const descriptionMaxWidth = 1002;
+    const descriptionMaxHeight = 488;
+    let descriptionSize = 40;
+    let lines = [];
+    let lineHeight = 51;
+    while (descriptionSize > 16) {
+      context.font = `${descriptionSize}px "FgoCeText", sans-serif`;
+      lines = wrapText(context, description, descriptionMaxWidth);
+      lineHeight = Math.max(18, Math.round(descriptionSize * 1.25));
+      if (lines.length * lineHeight <= descriptionMaxHeight) break;
+      descriptionSize -= 1;
+    }
+    // Keep the full entered description visible in the card's text area.
+    // The editor caps the input at a length that still fits at this minimum.
+    setOutlinedTextStyle(context, `${descriptionSize}px "FgoCeText", sans-serif`, 5);
     lines.forEach((line, index) => {
       if (line) drawOutlinedText(context, line, 781, 540 + index * lineHeight);
     });
@@ -235,6 +248,12 @@
     output.textContent = output.value;
   }
 
+  function resizeDescriptionControl() {
+    if (!dom.lowerText) return;
+    dom.lowerText.style.height = "auto";
+    dom.lowerText.style.height = `${Math.min(480, Math.max(220, dom.lowerText.scrollHeight))}px`;
+  }
+
   function updateFromControls() {
     state.cardName = dom.cardName.value;
     state.atk = Math.max(0, Math.min(9999, Number(dom.atk.value) || 0));
@@ -247,6 +266,7 @@
     updateRangeOutput(dom.artScale, dom.artScaleValue, "%");
     updateRangeOutput(dom.artX, dom.artXValue, "%");
     updateRangeOutput(dom.artY, dom.artYValue, "%");
+    resizeDescriptionControl();
     scheduleRender();
   }
 
@@ -298,6 +318,7 @@
     dom.hp.value = "100";
     dom.upperText.value = "coolkid凯";
     dom.lowerText.value = DEFAULT_DESCRIPTION;
+    resizeDescriptionControl();
     dom.artName.textContent = "模板示例图";
     resetArtworkTransform();
     setStatus("已恢复模板内容 · 1920 × 1080 · PNG");
@@ -318,14 +339,19 @@
     try {
       render();
       const blob = await canvasToBlob(dom.canvas);
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = `自制礼装-${state.rarity}星-${state.atk}ATK.png`;
-      document.body.append(anchor);
-      anchor.click();
-      anchor.remove();
-      window.setTimeout(() => URL.revokeObjectURL(url), 1500);
+      const filename = `自制礼装-${state.rarity}星-${state.atk}ATK.png`;
+      if (typeof window.FgoNativeFileSaver?.saveBlob === "function") {
+        await window.FgoNativeFileSaver.saveBlob(blob, filename, "保存或分享自制礼装");
+      } else {
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = filename;
+        document.body.append(anchor);
+        anchor.click();
+        anchor.remove();
+        window.setTimeout(() => URL.revokeObjectURL(url), 1500);
+      }
       setStatus(`PNG 已生成 · ${(blob.size / 1024 / 1024).toFixed(1)} MB`);
     } catch (error) {
       setStatus(error.message || "PNG 导出失败", true);

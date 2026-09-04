@@ -4,6 +4,7 @@
   const STORY_DIALOGUE_BOX_URL = "assets/story/dialogue-box.png";
   const STORY_NAME_BOX_URL = "assets/story/name-box.png";
   const STORY_DIALOGUE_UI_CONTROLS_URL = "assets/story/dialogue-ui-controls.png";
+  const STORY_CHOICE_BOX_URL = "assets/story/choice-box.png";
   const STORY_FALLBACK_FONT_FAMILY = '"Microsoft YaHei", sans-serif';
   const STORY_FONT_FAMILY = '"FgoFzZhengzhong", "Microsoft YaHei", sans-serif';
   const STORY_FONT_OPTIONS = {
@@ -29,7 +30,15 @@
   const STORY_DIALOGUE_TEXT_OPACITY = 1;
   const STORY_DIALOGUE_UI_CONTROLS_WIDTH = 1140;
   const STORY_DIALOGUE_UI_CONTROLS_HEIGHT = 178;
+  const STORY_CHOICE_BOX_WIDTH = 780;
+  const STORY_CHOICE_BOX_HEIGHT = 84;
+  const STORY_CHOICE_MAX_WIDTH = 0;
+  const STORY_CHOICE_GAP = 18;
   const STORY_TYPEWRITER_CHARACTERS_PER_SECOND = 20;
+  const STORY_TYPEWRITER_SPEED_MIN = 1;
+  const STORY_TYPEWRITER_SPEED_MAX = 60;
+  const STORY_TYPEWRITER_PAUSE_MIN = 0.1;
+  const STORY_TYPEWRITER_PAUSE_MAX = 10;
   const STORY_DIALOGUE_FONT_SCALE_MIN = 0.8;
   const STORY_DIALOGUE_FONT_SCALE_MAX = 1.4;
   const STORY_ACTOR_ANIMATION_DURATION_DEFAULT = 0.7;
@@ -187,6 +196,56 @@
     return Math.max(minimumSize, size);
   }
 
+  function normalizeTypewriterSpeed(value) {
+    const speed = Number(value);
+    return Number.isFinite(speed)
+      ? Math.max(STORY_TYPEWRITER_SPEED_MIN, Math.min(STORY_TYPEWRITER_SPEED_MAX, speed))
+      : STORY_TYPEWRITER_CHARACTERS_PER_SECOND;
+  }
+
+  function getTypewriterPauses(dialogue, characterCount) {
+    const pauses = Array.isArray(dialogue?.typewriterPauses) ? dialogue.typewriterPauses : [];
+    return pauses.map((pause) => ({
+      at: Math.max(0, Math.min(characterCount, Math.floor(Number(pause?.at) || 0))),
+      duration: Number.isFinite(Number(pause?.duration))
+        ? Math.max(STORY_TYPEWRITER_PAUSE_MIN, Math.min(STORY_TYPEWRITER_PAUSE_MAX, Number(pause.duration)))
+        : STORY_TYPEWRITER_PAUSE_MIN
+    })).sort((left, right) => left.at - right.at);
+  }
+
+  function getTypewriterSpeedRanges(dialogue, characterCount) {
+    const ranges = Array.isArray(dialogue?.textSpeedRanges) ? dialogue.textSpeedRanges : [];
+    return ranges.map((range) => ({
+      start: Math.max(0, Math.min(characterCount, Math.floor(Number(range?.start) || 0))),
+      end: Math.max(0, Math.min(characterCount, Math.floor(Number(range?.end) || 0))),
+      speed: normalizeTypewriterSpeed(range?.speed)
+    })).filter((range) => range.end > range.start);
+  }
+
+  function getTypewriterSpeedAt(speedRanges, index, fallback) {
+    const range = speedRanges.find((item) => index >= item.start && index < item.end);
+    return range ? range.speed : fallback;
+  }
+
+  function getDialogueTypewriterTiming(dialogue) {
+    const characters = Array.from(String(dialogue?.text || ""));
+    const speed = normalizeTypewriterSpeed(dialogue?.typewriterSpeed);
+    const pauses = getTypewriterPauses(dialogue, characters.length);
+    const speedRanges = getTypewriterSpeedRanges(dialogue, characters.length);
+    const pausesByPosition = new Map();
+    pauses.forEach((pause) => {
+      pausesByPosition.set(pause.at, (pausesByPosition.get(pause.at) || 0) + pause.duration);
+    });
+    let elapsed = 0;
+    const revealTimes = characters.map((_character, index) => {
+      elapsed += pausesByPosition.get(index) || 0;
+      elapsed += 1 / getTypewriterSpeedAt(speedRanges, index, speed);
+      return elapsed;
+    });
+    const totalDuration = elapsed + (pausesByPosition.get(characters.length) || 0);
+    return { speed, speedRanges, pauses, revealTimes, totalDuration };
+  }
+
   function getVisibleDialogueText(dialogue, normalizedProgress) {
     const characters = Array.from(String(dialogue.text || ""));
     if (!dialogue.typewriter || normalizedProgress >= 1) {
@@ -194,9 +253,10 @@
     }
     const duration = Math.max(0, Number(dialogue.duration) || 0);
     const elapsedSeconds = normalizedProgress * duration;
-    const visibleCount = Math.min(
-      characters.length,
-      Math.floor(elapsedSeconds * STORY_TYPEWRITER_CHARACTERS_PER_SECOND)
+    const timing = getDialogueTypewriterTiming(dialogue);
+    const visibleCount = timing.revealTimes.reduce(
+      (count, revealTime) => count + (revealTime <= elapsedSeconds + 1e-9 ? 1 : 0),
+      0
     );
     return characters.slice(0, visibleCount).join("");
   }
@@ -294,6 +354,29 @@
       textY: boxY + Math.max(64 * scale, aspect === "9:16" ? 36 : 0),
       textWidth: boxWidth - 102 * scale
     };
+  }
+
+  function getChoiceLayout(options, width, height, aspect) {
+    const count = Array.isArray(options) ? options.length : 0;
+    if (!count) {
+      return [];
+    }
+    const scale = width / 1024;
+    const boxWidth = STORY_CHOICE_BOX_WIDTH * scale;
+    const boxHeight = STORY_CHOICE_BOX_HEIGHT * scale;
+    const gap = STORY_CHOICE_GAP * scale;
+    const totalHeight = count * boxHeight + Math.max(0, count - 1) * gap;
+    const startY = aspect === "9:16"
+      ? Math.max(70 * scale, height * 0.25 - totalHeight / 2)
+      : Math.max(30 * scale, height * 0.34 - totalHeight / 2);
+    return options.map((option, index) => ({
+      option,
+      index,
+      x: (width - boxWidth) / 2,
+      y: startY + index * (boxHeight + gap),
+      width: boxWidth,
+      height: boxHeight
+    }));
   }
 
   function drawDialogueFallback(context, layout) {
@@ -403,6 +486,7 @@
         STORY_DIALOGUE_BOX_URL,
         STORY_NAME_BOX_URL,
         STORY_DIALOGUE_UI_CONTROLS_URL,
+        STORY_CHOICE_BOX_URL,
         ...urls.filter(Boolean)
       ]));
       const entries = allUrls.map((url) => loadImage(url)).filter(Boolean);
@@ -415,9 +499,11 @@
     }
 
     function drawDialogue(context, scene, width, height, aspect, normalizedProgress, alpha, fontScale = 1) {
-      if (!scene.dialogue.text && !scene.dialogue.speaker) {
+      const dialogueAlpha = Math.max(0, Math.min(1, Number(alpha) || 0));
+      if (dialogueAlpha <= 0 || scene.dialogue?.showBox === false || (!scene.dialogue.text && !scene.dialogue.speaker)) {
         return;
       }
+      context.globalAlpha = dialogueAlpha;
       const layout = getDialogueLayout(width, height, aspect);
       // Keep the dialogue box geometry stable while allowing stronger or more
       // restrained body text. Line spacing follows the font size so multi-line
@@ -459,7 +545,7 @@
         );
       }
 
-      context.globalAlpha = alpha * STORY_NAME_TEXT_OPACITY;
+      context.globalAlpha = dialogueAlpha * STORY_NAME_TEXT_OPACITY;
       context.textBaseline = "alphabetic";
       context.fillStyle = "#fafaf8";
       context.strokeStyle = "rgb(7 27 58 / 86%)";
@@ -491,7 +577,7 @@
       drawOutlinedText(context, speaker, layout.speakerX, layout.speakerY);
 
       const visibleText = getVisibleDialogueText(scene.dialogue, normalizedProgress);
-      context.globalAlpha = alpha * STORY_DIALOGUE_TEXT_OPACITY;
+      context.globalAlpha = dialogueAlpha * STORY_DIALOGUE_TEXT_OPACITY;
       context.shadowColor = "rgb(0 0 0 / 34%)";
       context.shadowBlur = Math.max(0.5, 0.8 * layout.scale);
       context.shadowOffsetX = Math.max(0.25, 0.45 * layout.scale);
@@ -602,6 +688,122 @@
       context.drawImage(actorEffectCanvas, 0, 0);
     }
 
+    function drawChoices(context, scene, width, height, aspect, alpha, fontScale = 1) {
+      const choices = scene.choiceSegment ? (Array.isArray(scene.choiceSegment.options)
+        ? scene.choiceSegment.options.filter((option) => option && String(option.text || "").trim())
+        : []) : (scene.showChoices === false ? [] : (Array.isArray(scene.options)
+        ? scene.options.filter((option) => option && String(option.text || "").trim())
+        : []));
+      if (!choices.length) {
+        return;
+      }
+      const choiceBox = loadImage(STORY_CHOICE_BOX_URL);
+      const selectedId = scene.choiceSegment?.selectedOptionId || scene.selectedOptionId ? String(scene.choiceSegment?.selectedOptionId || scene.selectedOptionId) : "";
+      const selectionProgress = Number.isFinite(Number(scene.optionSelectionProgress))
+        ? Math.max(0, Math.min(1, Number(scene.optionSelectionProgress)))
+        : 0;
+      const layout = getChoiceLayout(choices, width, height, aspect);
+      const baseScale = width / STORY_BASE_WIDTH;
+      const normalizedFontScale = Number.isFinite(Number(fontScale))
+        ? Math.max(STORY_DIALOGUE_FONT_SCALE_MIN, Math.min(STORY_DIALOGUE_FONT_SCALE_MAX, Number(fontScale)))
+        : 1;
+      context.save();
+      context.globalAlpha = alpha;
+      context.textAlign = "center";
+      context.textBaseline = "middle";
+      context.font = `500 ${Math.max(16, Math.round(28 * baseScale))}px ${activeFontFamily}`;
+      context.strokeStyle = "rgb(7 27 58 / 86%)";
+      context.lineJoin = "round";
+      context.lineWidth = Math.max(1, 1.35 * baseScale);
+      context.shadowColor = "rgb(0 0 0 / 42%)";
+      context.shadowBlur = Math.max(0.5, 0.9 * baseScale);
+      context.shadowOffsetY = Math.max(0.5, 0.8 * baseScale);
+      layout.forEach(({ option, x, y, width: boxWidth, height: boxHeight }) => {
+        const selected = selectedId && String(option.id) === selectedId;
+        const text = String(option.text || "").trim();
+        const centerX = x + boxWidth / 2;
+        const centerY = y + boxHeight / 2;
+        const preferredFontSize = 28 * baseScale * normalizedFontScale;
+        const fittedFontSize = fitFontSize(
+          context,
+          text,
+          preferredFontSize,
+          Math.max(13, 17 * baseScale),
+          boxWidth - 70 * baseScale,
+          500,
+          activeFontFamily
+        );
+        context.font = `500 ${Math.round(fittedFontSize)}px ${activeFontFamily}`;
+        context.globalAlpha = alpha;
+        if (choiceBox && choiceBox.ready) {
+          context.drawImage(choiceBox.image, x, y, boxWidth, boxHeight);
+        } else {
+          context.fillStyle = "rgb(4 9 14 / 94%)";
+          context.strokeStyle = "#4a8fd8";
+          context.lineWidth = Math.max(1, 2 * baseScale);
+          context.fillRect(x, y, boxWidth, boxHeight);
+          context.strokeRect(x, y, boxWidth, boxHeight);
+        }
+
+        // The option geometry remains fixed while its base layer fades. A very
+        // brief color flash precedes the independently expanding text echo.
+        const flashActive = selected && selectionProgress > 0 && selectionProgress < 0.16;
+        context.globalAlpha = alpha;
+        context.strokeStyle = "rgb(7 27 58 / 86%)";
+        context.lineWidth = Math.max(1, 1.35 * baseScale);
+        if (flashActive) {
+          context.fillStyle = "#f3c86b";
+        } else {
+          setDialogueGradient(
+            context,
+            centerX,
+            centerY - fittedFontSize,
+            centerY + Math.max(3, fittedFontSize * 0.12)
+          );
+        }
+        context.shadowColor = "rgb(0 0 0 / 34%)";
+        context.shadowBlur = Math.max(0.5, 0.8 * baseScale);
+        context.shadowOffsetX = Math.max(0.25, 0.45 * baseScale);
+        context.shadowOffsetY = Math.max(0.35, 0.65 * baseScale);
+        drawOutlinedText(context,
+          text,
+          centerX,
+          centerY
+        );
+
+        const echoProgress = selected
+          ? Math.max(0, Math.min(1, (selectionProgress - 0.12) / 0.68))
+          : 0;
+        if (echoProgress > 0 && echoProgress < 1) {
+          const easedEcho = applyStoryAnimationEasing(echoProgress, "ease-out");
+          const textWidth = Math.max(1, context.measureText(text).width);
+          const maximumScale = Math.max(1, Math.min(
+            1.55,
+            (boxWidth - 44 * baseScale) / textWidth,
+            (boxHeight - 18 * baseScale) / Math.max(1, fittedFontSize)
+          ));
+          const echoScale = 1 + (maximumScale - 1) * easedEcho;
+          context.save();
+          context.translate(centerX, centerY);
+          context.scale(echoScale, echoScale);
+          context.globalAlpha = Math.pow(1 - echoProgress, 1.45) * 0.72;
+          context.fillStyle = "#f8f8f5";
+          context.strokeStyle = "rgb(7 27 58 / 55%)";
+          context.lineWidth = Math.max(0.75, 1.1 * baseScale) / echoScale;
+          context.shadowColor = "transparent";
+          context.shadowBlur = 0;
+          context.shadowOffsetY = 0;
+          drawOutlinedText(context, text, 0, 0);
+          context.restore();
+        }
+        context.shadowColor = "transparent";
+        context.shadowBlur = 0;
+        context.shadowOffsetY = 0;
+        context.globalAlpha = alpha;
+      });
+      context.restore();
+    }
+
     function render(scene, progress) {
       if (!canvas || !scene) {
         return;
@@ -649,8 +851,12 @@
       }
 
       const actorEntries = scene.actors
-        .filter((actor) => actor && actor.url)
-        .map((actor) => ({ actor, entry: loadImage(actor.url) }))
+        .filter((actor) => actor && actor.hidden !== true && actor.url)
+        .map((actor) => ({
+          actor,
+          entry: loadImage(actor.url),
+          previousEntry: actor.transitionPreviousUrl ? loadImage(actor.transitionPreviousUrl) : null
+        }))
         .filter(({ entry }) => entry && entry.ready);
       const activeActorId = actorEntries.length > 1 && scene.dialogue
         ? scene.dialogue.actorId
@@ -662,7 +868,7 @@
           isSpeaker: Boolean(activeActorId && actorInfo.actor.assetId === activeActorId)
         }))
         .sort((left, right) => Number(left.isSpeaker) - Number(right.isSpeaker) || left.index - right.index);
-      actorLayout.forEach(({ actor, entry, x, y, width: actorWidth, height: actorHeight, isSpeaker }) => {
+      actorLayout.forEach(({ actor, entry, previousEntry, x, y, width: actorWidth, height: actorHeight, isSpeaker }) => {
         const transition = scene.animateActors && ["fade", "slide-left", "slide-right", "flash"]
           .includes(actor.entryAnimation) ? actor.entryAnimation : "cut";
         const easing = ["linear", "ease-in", "ease-out", "ease-in-out"].includes(actor.animationEasing)
@@ -694,7 +900,23 @@
           : exitTransition === "slide-right" ? exitProgress * width * slideDistance : 0;
         const entryAlpha = transition === "fade" ? entryProgress : 1;
         const exitAlpha = exitTransition === "fade" || exitTransition === "shrink" ? 1 - exitProgress : 1;
+        const actorSwitch = scene.actorSwitchTransition &&
+          scene.actorSwitchTransition.fromId && scene.actorSwitchTransition.toId;
+        const switchProgress = actorSwitch
+          ? Math.max(0, Math.min(1, Number(scene.actorSwitchTransition.progress) || 0))
+          : 1;
+        const switchAlpha = actorSwitch && String(actor.assetId) === String(actorSwitch.toId)
+          ? switchProgress
+          : actorSwitch && String(actor.assetId) === String(actorSwitch.fromId)
+            ? 1 - switchProgress
+            : 1;
         const actorOpacity = Number.isFinite(Number(actor.opacity)) ? Number(actor.opacity) : 1;
+        const transitionAlpha = Number.isFinite(Number(actor.transitionAlpha))
+          ? Math.max(0, Math.min(1, Number(actor.transitionAlpha)))
+          : 1;
+        const transitionPreviousAlpha = Number.isFinite(Number(actor.transitionPreviousAlpha))
+          ? Math.max(0, Math.min(1, Number(actor.transitionPreviousAlpha)))
+          : 0;
         const actorScale = Number.isFinite(Number(actor.scale))
           ? Math.max(0.5, Math.min(2, Number(actor.scale)))
           : 1;
@@ -712,8 +934,14 @@
         const isInactive = Boolean(activeActorId && !isSpeaker);
         const colorMode = ["color", "dim"].includes(actor.colorMode) ? actor.colorMode : "auto";
         const shouldDim = colorMode === "dim" || (colorMode === "auto" && isInactive);
-        context.globalAlpha = entryAlpha * exitAlpha * Math.max(0, Math.min(1, actorOpacity));
+        const baseActorAlpha = entryAlpha * exitAlpha * switchAlpha * Math.max(0, Math.min(1, actorOpacity));
         context.filter = shouldDim ? "grayscale(40%) brightness(82%)" : "none";
+        if (previousEntry && previousEntry.ready && transitionPreviousAlpha > 0.001 &&
+            transformedWidth > 0.01 && transformedHeight > 0.01) {
+          context.globalAlpha = baseActorAlpha * transitionPreviousAlpha;
+          context.drawImage(previousEntry.image, transformedX, transformedY, transformedWidth, transformedHeight);
+        }
+        context.globalAlpha = baseActorAlpha * transitionAlpha;
         if (transformedWidth > 0.01 && transformedHeight > 0.01 && context.globalAlpha > 0.001) {
           context.drawImage(entry.image, transformedX, transformedY, transformedWidth, transformedHeight);
         }
@@ -733,6 +961,15 @@
       context.globalAlpha = 1;
       context.filter = "none";
       drawDialogue(context, scene, width, height, aspect, normalizedProgress, 1, fontScale);
+      drawChoices(
+        context,
+        scene,
+        width,
+        height,
+        aspect,
+        Number.isFinite(Number(scene.choiceAlpha)) ? Number(scene.choiceAlpha) : 1,
+        fontScale
+      );
       context.restore();
     }
 
@@ -740,6 +977,18 @@
       render,
       preload,
       setFont,
+      getChoiceHitAreas: (scene) => {
+        if (!scene || (scene.showChoices === false && !scene.choiceSegment)) return [];
+        const aspect = options.getAspect() === "9:16" ? "9:16" : "16:9";
+        const size = typeof options.getSize === "function" ? options.getSize(aspect) : null;
+        const width = Math.max(1, Math.round(Number(size && size.width) || (aspect === "9:16" ? 540 : 960)));
+        const height = Math.max(1, Math.round(Number(size && size.height) || (aspect === "9:16" ? 960 : 540)));
+        const sourceOptions = scene.choiceSegment ? scene.choiceSegment.options : scene.options;
+        const choices = Array.isArray(sourceOptions)
+          ? sourceOptions.filter((option) => option && String(option.text || "").trim())
+          : [];
+        return getChoiceLayout(choices, width, height, aspect);
+      },
       getFont: () => ({ key: activeFontKey, family: activeFontFamily, label: getFontOption(activeFontKey).label })
     };
   }
@@ -749,6 +998,11 @@
     fontFamily: STORY_FONT_FAMILY,
     fontOptions: STORY_FONT_OPTIONS,
     typewriterCharactersPerSecond: STORY_TYPEWRITER_CHARACTERS_PER_SECOND,
+    typewriterSpeedMin: STORY_TYPEWRITER_SPEED_MIN,
+    typewriterSpeedMax: STORY_TYPEWRITER_SPEED_MAX,
+    typewriterPauseMin: STORY_TYPEWRITER_PAUSE_MIN,
+    typewriterPauseMax: STORY_TYPEWRITER_PAUSE_MAX,
+    getDialogueTypewriterTiming,
     getVisibleDialogueText
   };
 })();

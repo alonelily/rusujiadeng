@@ -12,7 +12,7 @@
       content="Atlas Academy FGO 礼装与从者立绘资源浏览器"
     />
     <title>如数迦贞</title>
-    <link rel="stylesheet" href="styles.css?v=20260903-story-banner-standalone-6" />
+    <link rel="stylesheet" href="styles.css?v=20260904-card-export-1" />
   </head>
   <body class="is-intro-open">
     <section class="source-intro" id="sourceIntro" role="dialog" aria-modal="true" aria-labelledby="sourceIntroTitle">
@@ -24,7 +24,7 @@
       <div class="intro-content">
         <span class="intro-index">A / 001</span>
         <h1 id="sourceIntroTitle">如数迦贞</h1>
-        <p class="intro-notice" id="sourceIntroNotice">所有数据来源于<strong>阿特拉斯院数据库</strong></p>
+        <p class="intro-notice" id="sourceIntroNotice">所有数据来源于<strong>阿特拉斯院数据库</strong>；自制从者和礼装模板来自于 B 站 UP 主 殇花莫愁 和 遗忘的银灵。</p>
         <span class="intro-source">POWERED BY ATLAS ACADEMY</span>
 
         <aside class="intro-development-notice" aria-labelledby="developmentNoticeTitle">
@@ -36,39 +36,40 @@
           </p>
         </aside>
 
-        <aside class="intro-update-notice" aria-labelledby="updateNoticeTitle">
-          <header class="intro-update-heading">
+        <details class="intro-update-notice">
+          <summary class="intro-update-heading">
             <span>VERSION UPDATE</span>
             <strong id="updateNoticeTitle">更新公告</strong>
-            <time datetime="2026-09-03">2026.09.03</time>
-          </header>
+            <time datetime="2026-09-04">2026.09.04</time>
+            <span class="intro-update-toggle" aria-hidden="true">展开</span>
+          </summary>
           <ul class="intro-update-list">
             <li>
-              <strong>本地作品与备份</strong>
-              <span>剧情作品会自动保存在本机，并支持导出、恢复 .zip 备份（兼容旧 .rusu 文件）。</span>
+              <strong>新增自制剧情选项</strong>
+              <span>在剧情流程中添加多个选项，支持独立停留时间、选择动画和点击音效。</span>
             </li>
             <li>
-              <strong>外部素材导入</strong>
-              <span>支持导入外部剧情背景，也可将多张人物立绘作为差分集直接使用。</span>
+              <strong>新增自制礼装功能</strong>
+              <span>可编辑礼装图片、属性、技能图标与资料，并导出自制礼装卡。</span>
             </li>
             <li>
-              <strong>对话文字样式</strong>
-              <span>支持任意文字区间自由变色，并可添加小字标注，表现更丰富的剧情台词。</span>
+              <strong>新增自制从者卡功能</strong>
+              <span>可编辑从者立绘、职阶、数值、技能图标、指令卡与资料。</span>
             </li>
             <li>
-              <strong>旁白分镜导出</strong>
-              <span>没有人物的分镜也可以编辑旁白并导出，人物名称不再是必填项。</span>
+              <strong>使用优化</strong>
+              <span>剧情立绘和背景根据主线、活动等剧情分类，并按最新内容优先展示。</span>
             </li>
             <li>
-              <strong>多分镜导出优化</strong>
-              <span>按分镜处理图片并降低导出过程的内存占用，减少多分镜视频导出时闪退的问题。</span>
+              <strong>对话节奏控制</strong>
+              <span>可控制正文显示速度、添加停顿，并单独调节选中文字的显示速度。</span>
             </li>
             <li>
-              <strong>剧情来源索引与 Android 3.3.4</strong>
-              <span>剧情立绘和背景支持按主线、活动等来源快速选择；Android 已同步最新功能并发布正式更新。</span>
+              <strong>动画参数扩展</strong>
+              <span>增加人物退场、淡入淡出等动画效果参数，预览与视频导出保持一致。</span>
             </li>
           </ul>
-        </aside>
+        </details>
 
         <div class="intro-window-grid" aria-label="功能入口">
           <button class="intro-window intro-window-library" id="enterAppButton" type="button">
@@ -404,7 +405,10 @@
                     <strong>对话流程</strong>
                     <span id="storyDialogueSummary">点击跳转到段落</span>
                   </div>
-                  <button class="icon-button story-add-dialogue-button" id="storyAddDialogueButton" type="button" title="新增对话" aria-label="新增对话">+</button>
+                  <div class="story-flow-add-actions">
+                    <button class="icon-button story-add-dialogue-button" id="storyAddDialogueButton" type="button" title="新增对话" aria-label="新增对话">+</button>
+                    <button class="icon-button story-add-choice-segment-button" id="storyAddChoiceSegmentButton" type="button" title="新增选项镜头" aria-label="新增选项镜头">◇</button>
+                  </div>
                 </div>
                 <div class="story-dialogue-list story-dialogue-sidebar-list" id="storyDialogueList" aria-label="当前画面对话段落"></div>
               </section>
@@ -585,7 +589,7 @@
               </section>
 
               <section class="story-tool-panel is-active" data-story-tool-panel="dialogue">
-                <section class="story-cast-panel" aria-labelledby="storyCastTitle">
+                <section class="story-cast-panel" id="storyCastPanel" aria-labelledby="storyCastTitle">
                   <div class="story-cast-heading">
                     <strong id="storyCastTitle">当前发言人物</strong>
                     <span id="storyActorSummary">本段对话</span>
@@ -607,7 +611,23 @@
                   <div class="story-dialogue-variant-list" id="storyDialogueVariantList"></div>
                 </section>
 
-                <div class="story-properties">
+                <section class="story-choice-editor" id="storyChoiceEditor" aria-labelledby="storyChoicesTitle" hidden>
+                  <div class="story-choice-editor-heading">
+                    <div>
+                      <strong id="storyChoicesTitle">选项镜头</strong>
+                      <span id="storyChoicesSummary">独立播放节点</span>
+                    </div>
+                    <label class="story-choice-duration-field">
+                      <span>停留时长（秒）</span>
+                      <input id="storyChoiceDurationInput" type="number" min="1" max="120" step="0.1" value="3" />
+                    </label>
+                  </div>
+                  <small class="story-choice-editor-hint">选项显示在前一段对话框上方；结束前会自动播放已选项的弹出效果和点击音效。</small>
+                  <div class="story-choice-list" id="storyChoiceList"></div>
+                  <button class="secondary-button story-choice-add-button" id="storyAddChoiceButton" type="button">添加选项</button>
+                </section>
+
+                <div class="story-properties" id="storyDialogueProperties">
                   <div class="story-property-grid">
                     <label class="story-field">
                       <span>当前显示名称</span>
@@ -615,12 +635,29 @@
                     </label>
                     <label class="story-field">
                         <span>本段时长（秒）</span>
-                      <input id="storyDurationInput" type="number" min="1" max="120" step="1" />
+                        <input id="storyDurationInput" type="number" min="1" max="120" step="0.1" />
+                    </label>
+                    <label class="story-dialogue-box-toggle">
+                      <input id="storyDialogueShowBoxInput" type="checkbox" checked />
+                      <span>显示对话框</span>
                     </label>
                   </div>
                   <label class="story-field story-dialogue-field">
-                    <span>对话内容</span>
-                    <textarea id="storyDialogueInput" rows="4" maxlength="500" placeholder="输入当前对话段落的台词"></textarea>
+                    <div class="story-dialogue-field-heading">
+                      <span>对话内容</span>
+                      <div class="story-dialogue-inline-controls">
+                        <label class="story-dialogue-speed-field">
+                          <span>正文速度 <output id="storyDialogueSpeedValue" for="storyDialogueSpeedInput">20 字/秒</output></span>
+                          <input id="storyDialogueSpeedInput" type="range" min="1" max="60" step="1" value="20" />
+                        </label>
+                        <button class="secondary-button story-dialogue-pause-add-button" id="storyDialoguePauseAddButton" type="button">添加停顿</button>
+                      </div>
+                    </div>
+                    <small class="story-dialogue-field-hint">拖动正文速度调整整段文字；把光标放在需要停顿的位置，再点击添加停顿。点击已有停顿标记可修改或删除</small>
+                    <div class="story-dialogue-input-shell" id="storyDialogueInputShell">
+                      <div class="story-dialogue-pause-highlight" id="storyDialoguePauseHighlight" aria-hidden="true"></div>
+                      <textarea id="storyDialogueInput" rows="4" maxlength="500" placeholder="输入当前对话段落的台词"></textarea>
+                    </div>
                   </label>
                   <div class="story-dialogue-style-editor" id="storyDialogueStyleEditor">
                     <div class="story-dialogue-style-toolbar">
@@ -631,6 +668,7 @@
                       <div class="story-dialogue-style-tabs" id="storyDialogueStyleTabs" role="tablist" aria-label="对白文字效果">
                         <button class="is-active" type="button" role="tab" aria-selected="true" aria-controls="storyDialogueColorPanel" data-dialogue-style-tab="color">颜色</button>
                         <button type="button" role="tab" aria-selected="false" aria-controls="storyDialogueFontSizePanel" data-dialogue-style-tab="font-size">字号</button>
+                        <button type="button" role="tab" aria-selected="false" aria-controls="storyDialogueSpeedPanel" data-dialogue-style-tab="speed">速度</button>
                         <button type="button" role="tab" aria-selected="false" aria-controls="storyDialogueRubyPanel" data-dialogue-style-tab="ruby">小字</button>
                       </div>
                     </div>
@@ -668,6 +706,22 @@
                     </div>
                     <div class="story-dialogue-font-size-range-list" id="storyDialogueFontSizeRangeList"></div>
                   </section>
+                  <section class="story-dialogue-speed-panel story-dialogue-style-panel" id="storyDialogueSpeedPanel" data-dialogue-style-panel="speed" role="tabpanel" aria-label="对白速度" aria-hidden="true">
+                    <div class="story-dialogue-color-heading">
+                      <strong>对白速度</strong>
+                      <span id="storyDialogueSpeedSelectionValue">尚未选择文字</span>
+                    </div>
+                    <div class="story-dialogue-speed-controls">
+                      <label class="story-field story-speed-range-field">
+                        <span>所选文字速度 <output id="storyDialogueRangeSpeedValue" for="storyDialogueRangeSpeedInput">20 字/秒</output></span>
+                        <input id="storyDialogueRangeSpeedInput" type="range" min="1" max="60" step="1" value="20" />
+                      </label>
+                      <button class="primary-button" id="storyDialogueSpeedApplyButton" type="button">应用速度</button>
+                      <button class="secondary-button" id="storyDialogueSpeedClearSelectionButton" type="button">恢复所选速度</button>
+                      <button class="secondary-button" id="storyDialogueSpeedResetButton" type="button">清除全部速度</button>
+                    </div>
+                    <div class="story-dialogue-speed-range-list" id="storyDialogueSpeedRangeList"></div>
+                  </section>
                   <section class="story-dialogue-ruby-panel story-dialogue-style-panel" id="storyDialogueRubyPanel" data-dialogue-style-panel="ruby" role="tabpanel" aria-label="对白小字标注" aria-hidden="true">
                     <div class="story-dialogue-color-heading">
                       <strong>对白小字标注</strong>
@@ -693,19 +747,18 @@
         </section>
 
         <section class="support-panel" id="supportPanel" aria-labelledby="supportPanelTitle" hidden>
-          <div class="support-panel-art">
-            <img src="assets/landing/support-wechat.jpg" alt="微信收款码" />
-          </div>
           <div class="support-panel-content">
             <span class="section-kicker">SUPPORT THE PROJECT</span>
             <h1 id="supportPanelTitle">支持该应用</h1>
-            <p>如数迦贞目前由个人开发，后续会逐步完善并上线正式应用。你的支持将用于后续功能开发、服务器租用，以及改善整体使用体验。</p>
-            <p>如果你想支持这个应用，可以帮助宣传、分享给更多创作者，或通过上方微信收款码捐赠。</p>
+            <p>该应用全部数据来自于网站https://apps.atlasacademy.io/db，由个人使用AI开发。Token很贵喵，如果master愿意请帮忙回回血，感谢你的支持。祝各位master使用开心喵。</p>
             <div class="support-panel-actions">
               <a class="primary-button" href="https://docs.qq.com/sheet/DQWZSeVBXbXJRWFFB?tab=BB08J2" target="_blank" rel="noreferrer">查看支持者名单</a>
               <button class="secondary-button" id="supportBackHomeButton" type="button">返回主界面</button>
             </div>
             <p class="support-panel-contact">如果有任何问题或希望退款，请联系 <a href="mailto:1725152015@qq.com">1725152015@qq.com</a>。</p>
+            <div class="support-panel-art">
+              <img src="assets/landing/support-wechat.jpg" alt="微信收款码" />
+            </div>
           </div>
         </section>
 
@@ -778,7 +831,7 @@
                 </label>
                 <label class="craft-essence-field">
                   <span>下栏描述</span>
-                  <textarea id="craftEssenceLowerText" rows="8" maxlength="500">“好久没来姥爷家了，
+                  <textarea id="craftEssenceLowerText" rows="12" maxlength="1200">“好久没来姥爷家了，
 一下车，眼前的景象一股月球风”
 
 原先的荒草地变得绿意丛生、大片大片的野花生机盎然。
@@ -1104,6 +1157,31 @@
         </section>
       </div>
 
+      <div class="story-dialogue-pause-prompt" id="storyDialoguePausePrompt" role="dialog" aria-modal="true" aria-labelledby="storyDialoguePausePromptTitle" hidden>
+        <button class="story-dialogue-pause-prompt-backdrop" id="storyDialoguePausePromptBackdrop" type="button" aria-label="关闭停顿设置"></button>
+        <section class="story-dialogue-pause-prompt-panel">
+          <header class="story-dialogue-pause-prompt-header">
+            <div>
+              <span class="section-kicker">DIALOGUE TIMING</span>
+              <h2 id="storyDialoguePausePromptTitle">添加停顿</h2>
+              <p id="storyDialoguePausePromptPosition">将在光标位置插入停顿</p>
+            </div>
+            <button class="icon-button" id="storyDialoguePausePromptCloseButton" type="button" title="关闭停顿设置" aria-label="关闭停顿设置">&times;</button>
+          </header>
+          <div class="story-dialogue-pause-prompt-body">
+            <label class="story-field">
+              <span>停顿时长（秒）</span>
+              <input id="storyDialoguePauseDurationInput" type="number" min="0.1" max="10" step="0.1" value="0.8" inputmode="decimal" />
+            </label>
+          </div>
+          <footer class="story-dialogue-pause-prompt-actions">
+            <button class="secondary-button is-danger" id="storyDialoguePauseDeleteButton" type="button" hidden>删除停顿</button>
+            <button class="secondary-button" id="storyDialoguePauseCancelButton" type="button">取消</button>
+            <button class="primary-button" id="storyDialoguePauseConfirmButton" type="button">确认添加</button>
+          </footer>
+        </section>
+      </div>
+
       <footer>
         <span>所有数据来源于阿特拉斯院数据库</span>
         <span class="footer-links">
@@ -1207,10 +1285,10 @@
     <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
     <script src="story-picker.js?v=20260825-picker-reset-1" defer></script>
     <script src="story-resource-catalog.js?v=20260830-story-index-1" defer></script>
-    <script src="craft-essence-editor.js?v=20260831-craft-essence-2" defer></script>
-    <script src="servant-card-editor.js?v=20260903-mobile-sticky-scrollbar-1" defer></script>
-    <script src="story-renderer.js?v=20260903-actor-animation-controls-1" defer></script>
-    <script src="app.js?v=20260903-story-banner-standalone-4" defer></script>
+    <script src="craft-essence-editor.js?v=20260904-adaptive-text-export-1" defer></script>
+    <script src="servant-card-editor.js?v=20260904-android-export-1" defer></script>
+    <script src="story-renderer.js?v=20260904-choice-layer-fade-5" defer></script>
+    <script src="app.js?v=20260904-card-export-1" defer></script>
   </body>
 </html>
 
