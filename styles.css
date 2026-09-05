@@ -3644,13 +3644,16 @@ footer a:hover {
   width: 100%;
   min-height: 96px;
   padding: 10px;
-  font: inherit;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
   line-height: 1.6;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 
 .story-dialogue-input-shell textarea {
+  display: block;
   position: relative;
   z-index: 1;
   background: transparent;

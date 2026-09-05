@@ -10,7 +10,7 @@
 
 ## Android 下载
 
-Android 最新正式版为 `3.3.7`（versionCode 33），可通过[稳定下载链接](https://github.com/alonelily/rusujiadeng/releases/latest/download/rusujiadeng-android.apk)安装。安装包 SHA-256：`14E22DE92FFC2003423C1B0B9ABB2A4A9B73F50F94BC556D269336214EF2F814`。
+Android 最新正式版为 `3.3.8`（versionCode 34），可通过[稳定下载链接](https://github.com/alonelily/rusujiadeng/releases/latest/download/rusujiadeng-android.apk)安装。安装包 SHA-256：`B4F30E75E048DDDE4D00EDC02A6C3A77E5EB2BD0DE9B89248A7DAAF2746C4854`。
 
 ## 本地作品与备份
 
