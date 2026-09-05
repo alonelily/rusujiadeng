@@ -2547,6 +2547,20 @@
         tileWidth,
         tileHeight
       );
+      // A few figure sheets contain a transparent crop that overlaps the
+      // visible body in the base figure. Clearing the full crop rectangle in
+      // that case creates a transparent band, so keep the base pixels below
+      // transparent parts of the tile. Normal sheets retain the historical
+      // full-rectangle replacement path for pixel-identical output.
+      const preserveBaseUnderTransparentTile = hasTransparentTileOverlap(
+        basePixels.data,
+        width,
+        baseHeight,
+        referenceTile.data,
+        tileWidth,
+        tileHeight,
+        placement
+      );
       if (onProgress) {
         onProgress({
           phase: "定位完成，正在逐张合成立绘差分",
@@ -2605,7 +2619,18 @@
         expressionIndex += 1;
         sourceContext.clearRect(0, 0, width, baseHeight);
         sourceContext.putImageData(basePixels, 0, 0);
-        sourceContext.clearRect(placement.x, placement.y, tileWidth, tileHeight);
+        if (preserveBaseUnderTransparentTile) {
+          clearVisibleTilePixels(
+            sourceContext,
+            placement.x,
+            placement.y,
+            tilePixels.data,
+            tileWidth,
+            tileHeight
+          );
+        } else {
+          sourceContext.clearRect(placement.x, placement.y, tileWidth, tileHeight);
+        }
         sourceContext.drawImage(
           bitmap,
           position.x,
@@ -2806,6 +2831,59 @@
       throw new Error("无法定位表情替换区域");
     }
     return best;
+  }
+
+  function hasTransparentTileOverlap(
+    baseData,
+    baseWidth,
+    baseHeight,
+    tileData,
+    tileWidth,
+    tileHeight,
+    placement
+  ) {
+    let transparentPixels = 0;
+    let overlappingPixels = 0;
+    for (let y = 0; y < tileHeight; y += 1) {
+      const baseY = placement.y + y;
+      if (baseY < 0 || baseY >= baseHeight) {
+        continue;
+      }
+      for (let x = 0; x < tileWidth; x += 1) {
+        const tileIndex = (y * tileWidth + x) * 4;
+        if (tileData[tileIndex + 3] > 8) {
+          continue;
+        }
+        transparentPixels += 1;
+        const baseX = placement.x + x;
+        if (baseX < 0 || baseX >= baseWidth) {
+          continue;
+        }
+        const baseIndex = (baseY * baseWidth + baseX) * 4;
+        if (baseData[baseIndex + 3] > 8) {
+          overlappingPixels += 1;
+        }
+      }
+    }
+
+    // Ignore isolated anti-aliased edge pixels. The affected sheets have a
+    // substantial transparent area over an existing visible body.
+    return transparentPixels >= 1024 && overlappingPixels >= 1024
+      && overlappingPixels / transparentPixels >= 0.05;
+  }
+
+  function clearVisibleTilePixels(context, x, y, tileData, tileWidth, tileHeight) {
+    const region = context.getImageData(x, y, tileWidth, tileHeight);
+    for (let index = 3; index < tileData.length; index += 4) {
+      if (tileData[index] <= 8) {
+        continue;
+      }
+      region.data[index] = 0;
+      region.data[index - 1] = 0;
+      region.data[index - 2] = 0;
+      region.data[index - 3] = 0;
+    }
+    context.putImageData(region, x, y);
   }
 
   function getVisiblePixelBounds(data, width, height) {
