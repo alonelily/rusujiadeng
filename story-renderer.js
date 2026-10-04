@@ -854,8 +854,7 @@
         .filter((actor) => actor && actor.hidden !== true && actor.url)
         .map((actor) => ({
           actor,
-          entry: loadImage(actor.url),
-          previousEntry: actor.transitionPreviousUrl ? loadImage(actor.transitionPreviousUrl) : null
+          entry: loadImage(actor.url)
         }))
         .filter(({ entry }) => entry && entry.ready);
       const activeActorId = actorEntries.length > 1 && scene.dialogue
@@ -868,7 +867,7 @@
           isSpeaker: Boolean(activeActorId && actorInfo.actor.assetId === activeActorId)
         }))
         .sort((left, right) => Number(left.isSpeaker) - Number(right.isSpeaker) || left.index - right.index);
-      actorLayout.forEach(({ actor, entry, previousEntry, x, y, width: actorWidth, height: actorHeight, isSpeaker }) => {
+      actorLayout.forEach(({ actor, entry, x, y, width: actorWidth, height: actorHeight, isSpeaker }) => {
         const transition = scene.animateActors && ["fade", "slide-left", "slide-right", "flash"]
           .includes(actor.entryAnimation) ? actor.entryAnimation : "cut";
         const easing = ["linear", "ease-in", "ease-out", "ease-in-out"].includes(actor.animationEasing)
@@ -900,23 +899,7 @@
           : exitTransition === "slide-right" ? exitProgress * width * slideDistance : 0;
         const entryAlpha = transition === "fade" ? entryProgress : 1;
         const exitAlpha = exitTransition === "fade" || exitTransition === "shrink" ? 1 - exitProgress : 1;
-        const actorSwitch = scene.actorSwitchTransition &&
-          scene.actorSwitchTransition.fromId && scene.actorSwitchTransition.toId;
-        const switchProgress = actorSwitch
-          ? Math.max(0, Math.min(1, Number(scene.actorSwitchTransition.progress) || 0))
-          : 1;
-        const switchAlpha = actorSwitch && String(actor.assetId) === String(actorSwitch.toId)
-          ? switchProgress
-          : actorSwitch && String(actor.assetId) === String(actorSwitch.fromId)
-            ? 1 - switchProgress
-            : 1;
         const actorOpacity = Number.isFinite(Number(actor.opacity)) ? Number(actor.opacity) : 1;
-        const transitionAlpha = Number.isFinite(Number(actor.transitionAlpha))
-          ? Math.max(0, Math.min(1, Number(actor.transitionAlpha)))
-          : 1;
-        const transitionPreviousAlpha = Number.isFinite(Number(actor.transitionPreviousAlpha))
-          ? Math.max(0, Math.min(1, Number(actor.transitionPreviousAlpha)))
-          : 0;
         const actorScale = Number.isFinite(Number(actor.scale))
           ? Math.max(0.5, Math.min(2, Number(actor.scale)))
           : 1;
@@ -934,14 +917,9 @@
         const isInactive = Boolean(activeActorId && !isSpeaker);
         const colorMode = ["color", "dim"].includes(actor.colorMode) ? actor.colorMode : "auto";
         const shouldDim = colorMode === "dim" || (colorMode === "auto" && isInactive);
-        const baseActorAlpha = entryAlpha * exitAlpha * switchAlpha * Math.max(0, Math.min(1, actorOpacity));
+        const baseActorAlpha = entryAlpha * exitAlpha * Math.max(0, Math.min(1, actorOpacity));
         context.filter = shouldDim ? "grayscale(40%) brightness(82%)" : "none";
-        if (previousEntry && previousEntry.ready && transitionPreviousAlpha > 0.001 &&
-            transformedWidth > 0.01 && transformedHeight > 0.01) {
-          context.globalAlpha = baseActorAlpha * transitionPreviousAlpha;
-          context.drawImage(previousEntry.image, transformedX, transformedY, transformedWidth, transformedHeight);
-        }
-        context.globalAlpha = baseActorAlpha * transitionAlpha;
+        context.globalAlpha = baseActorAlpha;
         if (transformedWidth > 0.01 && transformedHeight > 0.01 && context.globalAlpha > 0.001) {
           context.drawImage(entry.image, transformedX, transformedY, transformedWidth, transformedHeight);
         }

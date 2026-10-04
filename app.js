@@ -9,6 +9,7 @@
   const REGIONS = ["JP", "NA", "CN", "KR", "TW"];
   const EXPRESSION_TILE_SIZE = 256;
   const EXPRESSION_BASE_ROWS = 3;
+  const EXPRESSION_PAGE_SIZE = 1024;
   const STORY_PROJECT_STORAGE_KEY = "atlas-asset-index:story-project:v1";
   const STORY_PROJECT_ACTIVE_KEY = "atlas-asset-index:active-project:v1";
   const STORY_ASSET_DATABASE_NAME = "atlas-story-assets";
@@ -28,7 +29,6 @@
   const STORY_ACTOR_ANIMATION_DISTANCE_MAX = 2;
   const STORY_ACTOR_ANIMATION_DISTANCE_DEFAULT = 1;
   const STORY_ACTOR_EXIT_DURATION_DEFAULT = 0.5;
-  const STORY_DIALOGUE_ACTOR_SWITCH_DURATION = 4 / 30;
   const STORY_CHOICE_MAX_OPTIONS = 6;
   const STORY_CHOICE_TEXT_MAX_LENGTH = 80;
   const STORY_CHOICE_DURATION_MIN = 1;
@@ -40,6 +40,9 @@
   // trimmed local copy so playback starts at the audible click reliably in
   // browsers that do not seek an MP3 immediately after loading it.
   const STORY_CHOICE_CLICK_SOUND_URL = "assets/story/choice-click-offset-07.mp3";
+  // The source click is deliberately subtle. Raise it in offline mixes so it
+  // remains audible when the exported video also includes BGM.
+  const STORY_CHOICE_CLICK_EXPORT_GAIN = 8;
   // Exporting is an offline batch job. Prefer the encoder's low-latency path
   // and let the platform use hardware when it has a suitable implementation.
   // Both values are accepted by WebCodecs and are probed before encoding.
@@ -2074,6 +2077,7 @@
           if (error && error.name === "AbortError") {
             return;
           }
+          console.warn("Dialogue sheet extraction failed", group.sourceAssets[actualSourceIndex]?.url, error);
           sourceResults[sourceIndex] = [];
           group.failedSources += 1;
         } finally {
@@ -2133,8 +2137,9 @@
   }
 
   function detectDialogueSheetLayout(bitmap, width, height) {
-    const baseHeight = EXPRESSION_TILE_SIZE * EXPRESSION_BASE_ROWS;
-    const probeHeight = Math.min(Math.max(0, height - baseHeight), 1280);
+    const defaultBaseHeight = EXPRESSION_TILE_SIZE * EXPRESSION_BASE_ROWS;
+    let baseHeight = defaultBaseHeight;
+    const probeHeight = Math.min(Math.max(0, height - defaultBaseHeight), EXPRESSION_PAGE_SIZE * 4);
     if (probeHeight <= 0) {
       return {
         baseHeight,
@@ -2146,40 +2151,60 @@
     }
 
     const probeCanvas = document.createElement("canvas");
-    probeCanvas.width = width;
+    probeCanvas.width = Math.min(width, EXPRESSION_PAGE_SIZE);
     probeCanvas.height = probeHeight;
     const probeContext = probeCanvas.getContext("2d", { willReadFrequently: true });
-    probeContext.drawImage(bitmap, 0, baseHeight, width, probeHeight, 0, 0, width, probeHeight);
-    const probeData = probeContext.getImageData(0, 0, width, probeHeight).data;
+    probeContext.drawImage(
+      bitmap,
+      0,
+      defaultBaseHeight,
+      width,
+      probeHeight,
+      0,
+      0,
+      probeCanvas.width,
+      probeHeight
+    );
+    const probeData = probeContext.getImageData(0, 0, probeCanvas.width, probeHeight).data;
+    const visibleThreshold = Math.max(8, Math.round(32 * probeCanvas.width / width));
+    const visibleRows = new Uint16Array(probeHeight);
     let firstVisibleOffset = 0;
 
-    for (; firstVisibleOffset < probeHeight; firstVisibleOffset += 1) {
+    for (let y = 0; y < probeHeight; y += 1) {
       let visibleCount = 0;
-      for (let x = 0; x < width; x += 2) {
-        if (probeData[(firstVisibleOffset * width + x) * 4 + 3] > 8) {
+      for (let x = 0; x < probeCanvas.width; x += 1) {
+        if (probeData[(y * probeCanvas.width + x) * 4 + 3] > 8) {
           visibleCount += 1;
-          if (visibleCount >= 32) {
-            break;
-          }
         }
       }
-      if (visibleCount >= 32) {
-        break;
-      }
+      visibleRows[y] = visibleCount;
+    }
+    for (; firstVisibleOffset < probeHeight; firstVisibleOffset += 1) {
+      if (visibleRows[firstVisibleOffset] >= visibleThreshold) break;
     }
 
-    const expressionStart = baseHeight + firstVisibleOffset;
+    let expressionStart = defaultBaseHeight + firstVisibleOffset;
     if (firstVisibleOffset < EXPRESSION_TILE_SIZE / 2) {
-      return {
-        baseHeight,
-        expressionStart: baseHeight,
-        tileWidth: EXPRESSION_TILE_SIZE,
-        tileHeight: EXPRESSION_TILE_SIZE,
-        paged: false
-      };
+      const extendedExpressionStart = findExtendedDialogueExpressionStart(
+        visibleRows,
+        visibleThreshold,
+        defaultBaseHeight,
+        height
+      );
+      if (!extendedExpressionStart) {
+        return {
+          baseHeight,
+          expressionStart: baseHeight,
+          tileWidth: EXPRESSION_TILE_SIZE,
+          tileHeight: EXPRESSION_TILE_SIZE,
+          paged: false
+        };
+      }
+      baseHeight = extendedExpressionStart;
+      expressionStart = extendedExpressionStart;
     }
 
-    const pageSize = 1024;
+    const pageSize = EXPRESSION_PAGE_SIZE;
     const pageWidth = Math.min(pageSize, width);
     const pageHeight = Math.min(pageSize, height - expressionStart);
     const pageCanvas = document.createElement("canvas");
@@ -2228,16 +2253,51 @@
       };
     }
 
+    const standardSquareTiles = baseHeight > defaultBaseHeight && (
+      (
+        widthPeriod.period === EXPRESSION_TILE_SIZE && heightPeriod.period % EXPRESSION_TILE_SIZE === 0
+      ) || (
+        heightPeriod.period === EXPRESSION_TILE_SIZE && widthPeriod.period % EXPRESSION_TILE_SIZE === 0
+      )
+    );
+    const tileWidth = standardSquareTiles ? EXPRESSION_TILE_SIZE : widthPeriod.period;
+    const tileHeight = standardSquareTiles ? EXPRESSION_TILE_SIZE : heightPeriod.period;
     return {
       baseHeight,
       expressionStart,
-      tileWidth: widthPeriod.period,
-      tileHeight: heightPeriod.period,
+      tileWidth,
+      tileHeight,
       pageSize,
-      columnsPerPage: Math.max(1, Math.floor(pageSize / widthPeriod.period)),
-      rowsPerPage: Math.max(1, Math.floor(pageSize / heightPeriod.period)),
+      columnsPerPage: Math.max(1, Math.floor(pageSize / tileWidth)),
+      rowsPerPage: Math.max(1, Math.floor(pageSize / tileHeight)),
       paged: true
     };
+  }
+
+  function findExtendedDialogueExpressionStart(visibleRows, visibleThreshold, baseHeight, height) {
+    const minimumGap = EXPRESSION_TILE_SIZE * 2;
+    let sawVisibleOverflow = false;
+    let gapStart = -1;
+
+    for (let offset = 0; offset < visibleRows.length; offset += 1) {
+      const visible = visibleRows[offset] >= visibleThreshold;
+      if (!visible) {
+        if (sawVisibleOverflow && gapStart < 0) gapStart = offset;
+        continue;
+      }
+      if (gapStart >= 0 && offset - gapStart >= minimumGap) {
+        const nextVisibleRow = baseHeight + offset;
+        const pageStart = Math.floor(nextVisibleRow / EXPRESSION_PAGE_SIZE) * EXPRESSION_PAGE_SIZE;
+        const gapStartRow = baseHeight + gapStart;
+        if (pageStart >= baseHeight + EXPRESSION_PAGE_SIZE &&
+            pageStart >= gapStartRow && pageStart < height) {
+          return pageStart;
+        }
+      }
+      sawVisibleOverflow = true;
+      gapStart = -1;
+    }
+    return 0;
   }
 
   function findRepeatedProfilePeriod(profile, minimum, maximum) {
@@ -2828,6 +2888,9 @@
     }
 
     if (best.score > (useColorSignal ? 160 : 24)) {
+      console.warn("Expression placement candidate rejected", JSON.stringify({
+        baseWidth, baseHeight, tileWidth, tileHeight, tileCoverage, candidate: best
+      }));
       throw new Error("无法定位表情替换区域");
     }
     return best;
@@ -3133,6 +3196,18 @@
   function isNativeApp() {
     return Boolean(window.Capacitor && typeof window.Capacitor.isNativePlatform === "function"
       && window.Capacitor.isNativePlatform());
+  }
+
+  function isNativeVideoExporterAvailable() {
+    if (!isNativeApp() || typeof window.Capacitor.nativePromise !== "function") {
+      return false;
+    }
+    if (typeof window.Capacitor.isPluginAvailable === "function"
+      && window.Capacitor.isPluginAvailable("NativeVideoExporter")) {
+      return true;
+    }
+    return typeof window.Capacitor.getPlatform === "function"
+      && window.Capacitor.getPlatform() === "android";
   }
 
   function isNativeDirectFileSaverAvailable() {
@@ -4320,18 +4395,10 @@
     });
   }
 
-  function hasStoryDialogueVisualChange(scene, previousDialogue, dialogue) {
-    if (!scene || !previousDialogue || !dialogue) return false;
-    const previousActors = new Map(
-      getStoryActorsForDialogue(scene, previousDialogue).map((actor) => [actor.assetId, actor])
-    );
-    const currentActors = getStoryActorsForDialogue(scene, dialogue);
-    const currentIds = new Set(currentActors.map((actor) => actor.assetId));
-    if ([...previousActors.keys()].some((actorId) => !currentIds.has(actorId))) return true;
-    return currentActors.some((actor) => {
-      const previous = previousActors.get(actor.assetId);
-      return !previous || previous.hidden !== actor.hidden || previous.url !== actor.url;
-    });
+  function getStoryVisualDialogue(dialogue, scene) {
+    return isStoryChoiceSegment(dialogue)
+      ? (getStoryPreviousDialogue(scene, dialogue) || dialogue)
+      : dialogue;
   }
 
   function createStoryRenderScene(
@@ -4342,37 +4409,10 @@
     animationOptions = {}
   ) {
     const choiceSegment = isStoryChoiceSegment(dialogue) ? dialogue : null;
-    const dialogueForVisuals = choiceSegment ? (animationOptions.previousDialogue || getStoryPreviousDialogue(scene, choiceSegment)) : dialogue;
+    const dialogueForVisuals = choiceSegment
+      ? (animationOptions.previousDialogue || getStoryVisualDialogue(choiceSegment, scene))
+      : dialogue;
     const actors = getStoryActorsForDialogue(scene, dialogueForVisuals || dialogue);
-    const previousDialogue = animationOptions.previousDialogue || null;
-    const visualProgress = Number.isFinite(Number(animationOptions.actorVisualTransitionProgress))
-      ? Math.max(0, Math.min(1, Number(animationOptions.actorVisualTransitionProgress)))
-      : 1;
-    if (previousDialogue && visualProgress < 1) {
-      const previousActors = new Map(
-        getStoryActorsForDialogue(scene, previousDialogue).map((actor) => [actor.assetId, actor])
-      );
-      actors.forEach((actor) => {
-        const previous = previousActors.get(actor.assetId);
-        const previousVisible = Boolean(previous && previous.hidden !== true && previous.url);
-        const currentVisible = Boolean(actor.hidden !== true && actor.url);
-        const imageChanged = previousVisible && currentVisible && previous.url !== actor.url;
-        actor.hidden = !previousVisible && !currentVisible;
-        if (imageChanged) {
-          actor.transitionPreviousUrl = previous.url;
-          actor.transitionPreviousAlpha = 1 - visualProgress;
-          actor.transitionAlpha = visualProgress;
-        } else if (previousVisible && !currentVisible) {
-          actor.transitionPreviousUrl = previous.url;
-          actor.transitionPreviousAlpha = 1 - visualProgress;
-          actor.transitionAlpha = 0;
-        } else if (!previousVisible && currentVisible) {
-          actor.transitionAlpha = visualProgress;
-        } else {
-          actor.transitionAlpha = 1;
-        }
-      });
-    }
     return {
       ...scene,
       actors,
@@ -4391,14 +4431,6 @@
         ? Math.max(0, Number(animationOptions.actorExitAnimationRemaining))
         : null,
       actorExitAnimationWindow: Math.max(0, Number(animationOptions.actorExitAnimationWindow) || 0),
-      actorSwitchTransition: animationOptions.actorSwitchTransition &&
-        animationOptions.actorSwitchTransition.fromId && animationOptions.actorSwitchTransition.toId
-        ? {
-          fromId: String(animationOptions.actorSwitchTransition.fromId),
-          toId: String(animationOptions.actorSwitchTransition.toId),
-          progress: Math.max(0, Math.min(1, Number(animationOptions.actorSwitchTransition.progress) || 0))
-        }
-        : null,
       optionSelectionProgress: Number.isFinite(Number(animationOptions.optionSelectionProgress))
         ? Math.max(0, Math.min(1, Number(animationOptions.optionSelectionProgress)))
         : scene.selectedOptionId ? 1 : 0,
@@ -5299,7 +5331,7 @@
   function getStoryChoiceClickAudio() {
     if (!storyChoiceClickAudio) {
       storyChoiceClickAudio = new Audio(STORY_CHOICE_CLICK_SOUND_URL);
-      storyChoiceClickAudio.volume = 0.72;
+      storyChoiceClickAudio.volume = 1;
       storyChoiceClickAudio.preload = "auto";
       storyChoiceClickAudio.load();
     }
@@ -5496,6 +5528,12 @@
     state.story.activeSidebar = "dialogues";
     saveStoryProject();
     updateStorySceneControls();
+    if (isStoryDialogueSegment(dialogue) && dom.storyDialogueInput) {
+      requestAnimationFrame(() => {
+        dom.storyDialogueInput.focus({ preventScroll: true });
+        dom.storyDialogueInput.scrollIntoView({ block: "center", behavior: "smooth" });
+      });
+    }
   }
 
   function addStoryDialogue() {
@@ -8615,7 +8653,6 @@
       const choiceActive = isStoryChoiceSegment(dialogue);
       const shotActive = isStoryShotSegment(dialogue);
       const textActive = isStoryDialogueSegment(dialogue);
-      const previousDialogue = choiceActive ? getStoryPreviousDialogue(scene, dialogue) : (dialogueIndex > 0 ? dialogues[dialogueIndex - 1] : null);
       if (playbackDialogueId !== dialogue.id) {
         playbackDialogueId = dialogue.id;
         scene.activeDialogueId = dialogue.id;
@@ -8653,10 +8690,6 @@
       const animateEntries = entryWindow > 0 && elapsed < entryWindow;
       const animateExits = exitWindow > 0 && remaining <= exitWindow;
       const switchElapsed = Math.max(0, elapsed - dialogueStart);
-      const hasVisualChange = !choiceActive && hasStoryDialogueVisualChange(scene, previousDialogue, dialogue);
-      const actorVisualTransitionProgress = hasVisualChange && switchElapsed < STORY_DIALOGUE_ACTOR_SWITCH_DURATION
-        ? switchElapsed / STORY_DIALOGUE_ACTOR_SWITCH_DURATION
-        : 1;
       const choiceSelectionProgress = choiceActive && dialogue.selectedOptionId
         ? Math.max(0, Math.min(1, (dialogueProgress - (1 - STORY_CHOICE_SELECTION_DURATION / dialogue.duration)) /
           (STORY_CHOICE_SELECTION_DURATION / dialogue.duration)))
@@ -8678,8 +8711,6 @@
         animateActorExits: animateExits,
         actorExitAnimationRemaining: remaining,
         actorExitAnimationWindow: exitWindow,
-        previousDialogue: actorVisualTransitionProgress < 1 ? previousDialogue : null,
-        actorVisualTransitionProgress,
         optionSelectionProgress: choiceSelectionProgress,
         choiceAlpha
       });
@@ -8706,29 +8737,61 @@
   function findIncompleteStoryScene(options = {}) {
     const requireAssetUrls = Boolean(options.requireAssetUrls);
     return state.story.project.scenes.findIndex((scene) => {
-      return !scene.background || (requireAssetUrls && !scene.background.url) ||
-        (requireAssetUrls && scene.actors.some((actor) => !actor.url)) ||
-        getStoryDialogues(scene).some((dialogue) => (
-          requiresStoryDialogueText(dialogue) && !String(dialogue.text || "").trim()
-        ) || (
-          requireAssetUrls && !isStoryChoiceSegment(dialogue) &&
-          Object.values(dialogue.actorVariants || {}).some((variant) => !variant.url)
-        ));
+      if (!scene.background || (requireAssetUrls && !scene.background.url)) {
+        return true;
+      }
+      return getStoryDialogues(scene).some((dialogue) => {
+        if (requiresStoryDialogueText(dialogue) && !String(dialogue.text || "").trim()) {
+          return true;
+        }
+        if (!requireAssetUrls) {
+          return false;
+        }
+        const visualDialogue = getStoryVisualDialogue(dialogue, scene);
+        return getStoryActorsForDialogue(scene, visualDialogue)
+          .some((actor) => !actor.hidden && !String(actor.url || "").trim());
+      });
     });
   }
 
   function focusIncompleteStoryScene(incompleteIndex, options = {}) {
     const requireAssetUrls = Boolean(options.requireAssetUrls);
     const scene = state.story.project.scenes[incompleteIndex];
+    const incompleteDialogue = getStoryDialogues(scene).find((dialogue) => {
+      if (requiresStoryDialogueText(dialogue) && !String(dialogue.text || "").trim()) {
+        return true;
+      }
+      if (!requireAssetUrls) {
+        return false;
+      }
+      const visualDialogue = getStoryVisualDialogue(dialogue, scene);
+      return getStoryActorsForDialogue(scene, visualDialogue)
+        .some((actor) => !actor.hidden && !String(actor.url || "").trim());
+    });
+    const missingActorAsset = requireAssetUrls && incompleteDialogue &&
+      getStoryActorsForDialogue(scene, getStoryVisualDialogue(incompleteDialogue, scene))
+        .some((actor) => !actor.hidden && !String(actor.url || "").trim());
     const missing = [
       !scene.background || (requireAssetUrls && !scene.background.url) ? "剧情背景" : null,
-      (requireAssetUrls && scene.actors.some((actor) => !actor.url)) ? "剧情人物和表情" : null,
+      missingActorAsset ? "剧情人物和表情" : null,
       getStoryDialogues(scene).some((dialogue) => (
         requiresStoryDialogueText(dialogue) && !String(dialogue.text || "").trim()
       )) ? "完整对话内容" : null
     ].filter(Boolean);
     state.story.activeSceneId = scene.id;
+    if (incompleteDialogue) {
+      scene.activeDialogueId = incompleteDialogue.id;
+      scene.dialogue = incompleteDialogue;
+      state.story.activeTool = "dialogue";
+      state.story.activeSidebar = "dialogues";
+    }
     renderStoryEditor();
+    if (incompleteDialogue && isStoryDialogueSegment(incompleteDialogue) && dom.storyDialogueInput) {
+      requestAnimationFrame(() => {
+        dom.storyDialogueInput.focus({ preventScroll: true });
+        dom.storyDialogueInput.scrollIntoView({ block: "center", behavior: "smooth" });
+      });
+    }
     showToast(`分镜 ${incompleteIndex + 1} 还缺少：${missing.join("、")}`);
   }
 
@@ -8771,9 +8834,10 @@
   function getStoryAssetUrls(project) {
     return project.scenes.flatMap((scene) => [
       scene.background && scene.background.url,
-      ...scene.actors.map((actor) => actor && actor.url),
       ...getStoryDialogues(scene).flatMap((dialogue) =>
-        Object.values(dialogue.actorVariants || {}).map((variant) => variant && variant.url)
+        getStoryActorsForDialogue(scene, getStoryVisualDialogue(dialogue, scene))
+          .filter((actor) => !actor.hidden)
+          .map((actor) => actor && actor.url)
       )
     ]).filter(Boolean);
   }
@@ -8782,24 +8846,24 @@
     if (!scene) {
       return [];
     }
-    return [
+    return getStoryDialogues(scene).flatMap((dialogue) => [
       scene.background && scene.background.url,
-      ...(scene.actors || []).map((actor) => actor && actor.url),
-      ...getStoryDialogues(scene).flatMap((dialogue) =>
-        Object.values(dialogue.actorVariants || {}).map((variant) => variant && variant.url)
-      )
-    ].filter(Boolean);
+      ...getStoryActorsForDialogue(scene, getStoryVisualDialogue(dialogue, scene))
+        .filter((actor) => !actor.hidden)
+        .map((actor) => actor && actor.url)
+    ].filter(Boolean));
   }
 
   function getStoryDialogueAssetUrls(scene, dialogue) {
     if (!scene) {
       return [];
     }
+    const visualDialogue = getStoryVisualDialogue(dialogue, scene);
     return [
       scene.background && scene.background.url,
-      ...(scene.actors || []).map((actor) => actor && actor.url),
-      ...Object.values(dialogue && dialogue.actorVariants || {})
-        .map((variant) => variant && variant.url)
+      ...getStoryActorsForDialogue(scene, visualDialogue)
+        .filter((actor) => !actor.hidden)
+        .map((actor) => actor && actor.url)
     ].filter(Boolean);
   }
 
@@ -9125,7 +9189,7 @@
       .filter((segment) => isStoryChoiceSegment(segment.dialogue) && segment.dialogue.selectedOptionId)
       .map((segment) => ({
         time: Math.max(0, segment.end - STORY_CHOICE_SELECTION_DURATION),
-        gain: 0.72
+        gain: STORY_CHOICE_CLICK_EXPORT_GAIN
       }));
   }
 
@@ -9168,7 +9232,9 @@
       }
     };
     mixBuffer(bgmBuffer, 0, 1, true);
-    (clickEvents || []).forEach((event) => mixBuffer(clickBuffer, event.time, event.gain || 0.72, false));
+    (clickEvents || []).forEach((event) => {
+      mixBuffer(clickBuffer, event.time, event.gain || STORY_CHOICE_CLICK_EXPORT_GAIN, false);
+    });
     outputChannels.forEach((channel) => {
       for (let index = 0; index < channel.length; index += 1) {
         channel[index] = Math.max(-1, Math.min(1, channel[index]));
@@ -9279,15 +9345,7 @@
     const animateActors = entryWindow > 0 && sceneElapsed < entryWindow;
     const animateActorExits = exitWindow > 0 && sceneRemaining <= exitWindow;
     const actorAnimationProgress = entryWindow > 0 ? Math.min(1, sceneElapsed / entryWindow) : 1;
-    const previousSegment = match.index > 0 ? segments[match.index - 1] : null;
-    const previousDialogue = isStoryChoiceSegment(active.dialogue)
-      ? getStoryPreviousDialogue(active.scene, active.dialogue)
-      : (previousSegment && previousSegment.scene === active.scene ? previousSegment.dialogue : null);
     const segmentElapsed = Math.max(0, elapsed - active.start);
-    const hasVisualChange = !isStoryChoiceSegment(active.dialogue) && hasStoryDialogueVisualChange(active.scene, previousDialogue, active.dialogue);
-    const actorVisualTransitionProgress = hasVisualChange && segmentElapsed < STORY_DIALOGUE_ACTOR_SWITCH_DURATION
-      ? segmentElapsed / STORY_DIALOGUE_ACTOR_SWITCH_DURATION
-      : 1;
     // Most export frames are visually identical. Keep the existing canvas when
     // neither typewriter text nor an actor entry animation is changing.
     const visibleCharacterCount = active.dialogue.typewriter
@@ -9303,8 +9361,8 @@
     const choiceAlpha = isStoryChoiceSegment(active.dialogue) && choiceSelectionProgress > 0
       ? 1 - Math.min(1, choiceSelectionElapsed / STORY_CHOICE_FADE_DURATION)
       : 1;
-    const actorProgressKey = animateActors || animateActorExits || actorVisualTransitionProgress < 1
-      ? `${Math.round(actorAnimationProgress * 1000)}:${Math.round(sceneRemaining * 1000)}:${Math.round(actorVisualTransitionProgress * 1000)}`
+    const actorProgressKey = animateActors || animateActorExits
+      ? `${Math.round(actorAnimationProgress * 1000)}:${Math.round(sceneRemaining * 1000)}`
       : "1";
     const renderKey = `${match.index}:${visibleCharacterCount}:${actorProgressKey}:${Math.round(choiceSelectionProgress * 1000)}`;
     if (renderState && renderState.key === renderKey) {
@@ -9321,8 +9379,6 @@
         animateActorExits,
         actorExitAnimationRemaining: sceneRemaining,
         actorExitAnimationWindow: exitWindow,
-        previousDialogue: actorVisualTransitionProgress < 1 ? previousDialogue : null,
-        actorVisualTransitionProgress,
         optionSelectionProgress: choiceSelectionProgress,
         choiceAlpha
       }
@@ -9414,6 +9470,162 @@
       await audioSource.add(createLoopedStoryAudioChunk(sourceBuffer, startFrame, frameCount));
     }
     audioSource.close();
+  }
+
+  function canvasToStoryFrame(canvas) {
+    return new Promise((resolve, reject) => {
+      canvas.toBlob((blob) => {
+        if (blob && blob.size) {
+          resolve(blob);
+        } else {
+          reject(new Error("无法读取视频帧图片"));
+        }
+      }, "image/jpeg", 0.94);
+    });
+  }
+
+  function createNativeStoryPcmChunk(sourceBuffer, startFrame, frameCount) {
+    const outputRate = 48_000;
+    const channelCount = 2;
+    const bytes = new Uint8Array(frameCount * channelCount * 2);
+    const view = new DataView(bytes.buffer);
+    const sourceRate = Number(sourceBuffer && sourceBuffer.sampleRate) || outputRate;
+    const sourceLength = Number(sourceBuffer && sourceBuffer.length) || 0;
+    if (!sourceLength) {
+      return bytes;
+    }
+    const sourceChannels = Math.max(1, Number(sourceBuffer.numberOfChannels) || 1);
+    const getSample = (channel, position) => {
+      const wrapped = ((position % sourceLength) + sourceLength) % sourceLength;
+      const index = Math.floor(wrapped);
+      const nextIndex = (index + 1) % sourceLength;
+      const fraction = wrapped - index;
+      const data = sourceBuffer.getChannelData(Math.min(channel, sourceChannels - 1));
+      return data[index] * (1 - fraction) + data[nextIndex] * fraction;
+    };
+    for (let index = 0; index < frameCount; index += 1) {
+      const sourcePosition = (startFrame + index) * sourceRate / outputRate;
+      for (let channel = 0; channel < channelCount; channel += 1) {
+        const sample = Math.max(-1, Math.min(1, getSample(channel, sourcePosition)));
+        const value = sample < 0 ? Math.round(sample * 32768) : Math.round(sample * 32767);
+        view.setInt16((index * channelCount + channel) * 2, value, true);
+      }
+    }
+    return bytes;
+  }
+
+  async function encodeStoryWithNativeAndroid(renderer, canvas, project, totalDuration, audioBuffer) {
+    if (!isNativeVideoExporterAvailable()) {
+      throw new Error("Android 原生视频编码器不可用");
+    }
+    const frameRate = 30;
+    const width = project.aspect === "9:16" ? 1080 : 1920;
+    const height = project.aspect === "9:16" ? 1920 : 1080;
+    const filename = `${sanitizeFilename(project.title || "story")}.mp4`;
+    const hasAudio = Boolean(audioBuffer && audioBuffer.length);
+    const native = window.Capacitor.nativePromise;
+    let started = false;
+    try {
+      const startedResult = await native("NativeVideoExporter", "startExport", {
+        width,
+        height,
+        frameRate,
+        bitrate: 12_000_000,
+        hasAudio,
+        filename
+      });
+      started = true;
+      const actualWidth = Math.max(1, Number(startedResult && startedResult.width) || width);
+      const actualHeight = Math.max(1, Number(startedResult && startedResult.height) || height);
+
+      if (hasAudio) {
+        const totalAudioFrames = Math.ceil(totalDuration * 48_000);
+        const chunkFrames = 24_000;
+        for (let startFrame = 0; startFrame < totalAudioFrames; startFrame += chunkFrames) {
+          const frameCount = Math.min(chunkFrames, totalAudioFrames - startFrame);
+          const pcm = createNativeStoryPcmChunk(audioBuffer, startFrame, frameCount);
+          await native("NativeVideoExporter", "addAudioChunk", {
+            data: await blobToBase64(new Blob([pcm], { type: "application/octet-stream" })),
+            timestampUs: Math.round(startFrame / 48_000 * 1_000_000)
+          });
+          updateStoryExportProgress(
+            Math.min(0.2, startFrame / Math.max(1, totalAudioFrames) * 0.2),
+            `正在准备音频 ${Math.round(Math.min(1, (startFrame + frameCount) / Math.max(1, totalAudioFrames)) * 100)}%`
+          );
+        }
+      }
+
+      const segments = getStoryTimelineSegments(project);
+      const totalFrames = Math.max(1, Math.ceil(totalDuration * frameRate));
+      const loadedState = { scene: null, segment: null };
+      const renderState = { key: null };
+      let pendingFrame = null;
+      const sendPendingFrame = async (endTimestampUs) => {
+        if (!pendingFrame) {
+          return;
+        }
+        const durationUs = Math.max(
+          Math.round(1_000_000 / frameRate),
+          endTimestampUs - pendingFrame.timestampUs
+        );
+        await native("NativeVideoExporter", "addVideoFrame", {
+          data: await blobToBase64(pendingFrame.blob),
+          timestampUs: pendingFrame.timestampUs,
+          durationUs
+        });
+        pendingFrame = null;
+      };
+
+      for (let frameIndex = 0; frameIndex < totalFrames; frameIndex += 1) {
+        const timestampUs = Math.round(frameIndex / frameRate * 1_000_000);
+        const elapsed = Math.min(totalDuration, frameIndex / frameRate);
+        const activeSegment = findStoryTimelineSegment(segments, elapsed).segment;
+        await preloadStoryTimelineSegment(renderer, activeSegment, loadedState);
+        const changed = renderStoryTimelineFrame(renderer, segments, elapsed, renderState);
+        if (!pendingFrame || changed) {
+          await sendPendingFrame(timestampUs);
+          pendingFrame = {
+            blob: await canvasToStoryFrame(canvas),
+            timestampUs
+          };
+        }
+        if (frameIndex % 5 === 0 || frameIndex + 1 >= totalFrames) {
+          const progress = Math.min(1, (frameIndex + 1) / totalFrames);
+          updateStoryExportProgress(0.2 + progress * 0.74, `正在编码视频 ${Math.round(progress * 100)}%`);
+        }
+        if (frameIndex > 0 && frameIndex % STORY_EXPORT_YIELD_INTERVAL === 0) {
+          await new Promise((resolve) => setTimeout(resolve, 0));
+        }
+      }
+      await sendPendingFrame(Math.round(totalDuration * 1_000_000));
+      updateStoryExportProgress(0.98, "正在封装 MP4");
+      const nativeFile = await native("NativeVideoExporter", "finishExport", {});
+      started = false;
+      return {
+        nativeFile,
+        blob: null,
+        info: {
+          encoder: "android-native",
+          codec: "avc",
+          audioCodec: hasAudio ? "aac" : "",
+          container: "mp4",
+          formatLabel: "MP4",
+          extension: "mp4",
+          mimeType: "video/mp4",
+          width: actualWidth,
+          height: actualHeight,
+          frameRate,
+          hasAudio,
+          bitrate: 12_000_000,
+          bitrateMode: "constant"
+        }
+      };
+    } catch (error) {
+      if (started) {
+        await native("NativeVideoExporter", "cancelExport", {}).catch(() => {});
+      }
+      throw error;
+    }
   }
 
   async function encodeStoryWithWebCodecs(renderer, canvas, project, totalDuration, audioBuffer, profile, options = {}) {
@@ -9606,8 +9818,13 @@
       );
       dom.storyExportStatus.dataset.font = exportFont.key;
       dom.storyExportStatus.dataset.fontFallback = String(exportFont.fallback);
+      // Android WebView can report WebCodecs support even when the vendor
+      // encoder fails after export starts. The native MediaCodec path is more
+      // reliable on devices such as vivo/OriginOS, so prefer it whenever the
+      // bundled Android plugin is available.
+      const preferNativeVideoExporter = isNativeVideoExporterAvailable();
       let webCodecsProfiles = [];
-      if (hasStoryWebCodecsApis(hasAudio)) {
+      if (!preferNativeVideoExporter && hasStoryWebCodecsApis(hasAudio)) {
         exportStage = setStoryExportStage("codec-detection");
         updateStoryExportProgress(0, "正在检测设备视频编码能力");
         try {
@@ -9630,7 +9847,53 @@
         exportRenderer.setImageCacheLimit(useWebCodecs ? 12 : 8);
       }
       const mimeType = useWebCodecs ? null : getStoryVideoMimeType();
-      if (!useWebCodecs && (!mimeType || typeof HTMLCanvasElement.prototype.captureStream !== "function")) {
+      const webExportUnavailable = preferNativeVideoExporter || (!useWebCodecs &&
+        (!mimeType || typeof HTMLCanvasElement.prototype.captureStream !== "function"));
+      if (webExportUnavailable && isNativeVideoExporterAvailable()) {
+        exportStage = setStoryExportStage("image-preload");
+        updateStoryExportProgress(0, "正在准备原生视频导出");
+        let nativeAudioBuffer = null;
+        if (hasAudio) {
+          exportStage = setStoryExportStage("audio-decoding");
+          updateStoryExportProgress(0, project.bgm && project.bgm.url ? "正在混合 BGM 和音效" : "正在准备选项音效");
+          try {
+            nativeAudioBuffer = await decodeStoryExportAudioBuffer(project, totalDuration);
+            if (!nativeAudioBuffer) {
+              throw new Error("当前设备无法读取音频");
+            }
+          } catch (_error) {
+            throw new Error(project.bgm && project.bgm.url
+              ? "BGM 或选项音效无法解码，请更换 BGM 为 MP3、M4A 或 WAV 后重试"
+              : "选项点击音效无法解码，请刷新页面后重试");
+          }
+        }
+        exportStage = setStoryExportStage("native-encoding");
+        const result = await encodeStoryWithNativeAndroid(
+          exportRenderer,
+          exportCanvas,
+          project,
+          totalDuration,
+          nativeAudioBuffer
+        );
+        dom.storyExportStatus.dataset.encoder = result.info.encoder;
+        dom.storyExportStatus.dataset.codec = result.info.codec;
+        dom.storyExportStatus.dataset.audioCodec = result.info.audioCodec;
+        dom.storyExportStatus.dataset.container = result.info.container;
+        dom.storyExportStatus.dataset.mimeType = result.info.mimeType;
+        dom.storyExportStatus.dataset.width = String(result.info.width);
+        dom.storyExportStatus.dataset.height = String(result.info.height);
+        dom.storyExportStatus.dataset.frameRate = String(result.info.frameRate);
+        dom.storyExportStatus.dataset.hasAudio = String(result.info.hasAudio);
+        dom.storyExportStatus.dataset.bitrate = String(result.info.bitrate || "");
+        dom.storyExportStatus.dataset.bitrateMode = String(result.info.bitrateMode || "");
+        exportStage = setStoryExportStage("saving");
+        updateStoryExportProgress(1, "视频已导出");
+        showToast(result.info.width < 1920
+          ? "视频已导出到下载/如数迦贞（720p）"
+          : "视频已导出到下载/如数迦贞");
+        return;
+      }
+      if (webExportUnavailable) {
         throw new Error(isNativeApp()
           ? /iPad|iPhone|iPod/.test(navigator.userAgent)
             ? "此设备暂不支持 1080p 视频导出，请更新 iOS 后重试"
@@ -9673,6 +9936,48 @@
             break;
           } catch (error) {
             lastCodecError = error;
+            if (isNativeVideoExporterAvailable() && isStoryCodecCapabilityError(error)) {
+              updateStoryExportProgress(0, "网页编码器不可用，正在切换 Android 原生编码");
+              let nativeAudioBuffer = null;
+              if (hasAudio) {
+                exportStage = setStoryExportStage("audio-decoding");
+                try {
+                  nativeAudioBuffer = await decodeStoryExportAudioBuffer(project, totalDuration);
+                  if (!nativeAudioBuffer) {
+                    throw new Error("当前设备无法读取音频");
+                  }
+                } catch (_error) {
+                  throw new Error(project.bgm && project.bgm.url
+                    ? "BGM 或选项音效无法解码，请更换 BGM 为 MP3、M4A 或 WAV 后重试"
+                    : "选项点击音效无法解码，请刷新页面后重试");
+                }
+              }
+              exportStage = setStoryExportStage("native-encoding");
+              const nativeResult = await encodeStoryWithNativeAndroid(
+                exportRenderer,
+                exportCanvas,
+                project,
+                totalDuration,
+                nativeAudioBuffer
+              );
+              dom.storyExportStatus.dataset.encoder = nativeResult.info.encoder;
+              dom.storyExportStatus.dataset.codec = nativeResult.info.codec;
+              dom.storyExportStatus.dataset.audioCodec = nativeResult.info.audioCodec;
+              dom.storyExportStatus.dataset.container = nativeResult.info.container;
+              dom.storyExportStatus.dataset.mimeType = nativeResult.info.mimeType;
+              dom.storyExportStatus.dataset.width = String(nativeResult.info.width);
+              dom.storyExportStatus.dataset.height = String(nativeResult.info.height);
+              dom.storyExportStatus.dataset.frameRate = String(nativeResult.info.frameRate);
+              dom.storyExportStatus.dataset.hasAudio = String(nativeResult.info.hasAudio);
+              dom.storyExportStatus.dataset.bitrate = String(nativeResult.info.bitrate || "");
+              dom.storyExportStatus.dataset.bitrateMode = String(nativeResult.info.bitrateMode || "");
+              exportStage = setStoryExportStage("saving");
+              updateStoryExportProgress(1, "视频已导出");
+              showToast(nativeResult.info.width < 1920
+                ? "视频已导出到下载/如数迦贞（720p）"
+                : "视频已导出到下载/如数迦贞");
+              return;
+            }
             const canRetry = isStoryCodecCapabilityError(error) && profileIndex < webCodecsProfiles.length - 1;
             if (!canRetry) {
               throw error;
