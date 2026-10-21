@@ -7367,7 +7367,8 @@ footer a:hover {
 .servant-card-field textarea {
   min-height: 70px;
   padding: 8px;
-  resize: vertical;
+  overflow-y: hidden;
+  resize: none;
   line-height: 1.5;
 }
 

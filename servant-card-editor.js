@@ -1314,7 +1314,20 @@
     );
   }
 
+  function resizeSkillDetail(control) {
+    if (!control) return;
+    // Reset first so deleting text shrinks the field as well as growing it.
+    control.style.height = "auto";
+    const minimum = Number.parseFloat(getComputedStyle(control).minHeight) || 0;
+    control.style.height = `${Math.max(control.scrollHeight, minimum)}px`;
+  }
+
+  function resizeSkillDetails() {
+    if (dom.skillDetails) dom.skillDetails.forEach(resizeSkillDetail);
+  }
+
   function updateFromControls() {
+    resizeSkillDetails();
     state.name = dom.name.value;
     state.title = dom.title.value;
     state.className = dom.className.value;
@@ -1663,7 +1676,10 @@
       const nameControl = skillControl(dom.skillNames, group, index);
       const detailControl = skillControl(dom.skillDetails, group, index);
       if (nameControl) nameControl.value = skill.name;
-      if (detailControl) detailControl.value = skill.detail;
+      if (detailControl) {
+        detailControl.value = skill.detail;
+        resizeSkillDetail(detailControl);
+      }
       updateSkillThumb(group, index);
       closeSkillSearch();
       setStatus(`已选择${skillGroupLabel(group)}：${skill.name}`);
@@ -1763,7 +1779,10 @@
         const nameControl = skillControl(dom.skillNames, group, index);
         const detailControl = skillControl(dom.skillDetails, group, index);
         if (nameControl) nameControl.value = skill.name;
-        if (detailControl) detailControl.value = skill.detail;
+        if (detailControl) {
+          detailControl.value = skill.detail;
+          resizeSkillDetail(detailControl);
+        }
         updateSkillThumb(group, index);
       });
     });
