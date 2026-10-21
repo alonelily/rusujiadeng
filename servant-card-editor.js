@@ -28,6 +28,7 @@
   };
   const ABILITY_BASE_HEIGHT = 4000;
   const SKILL_ROW_FOOTER_HEIGHT = 20;
+  const SKILL_ROW_EDGE_BUFFER = 8;
   const PROFILE_PANEL_GAP = 24;
   const PROFILE_STATS_HEIGHT = 332;
   const PROFILE_SECTION_TEMPLATES = [
@@ -602,14 +603,11 @@
 
   function drawAbilityTextureFill(context, source, sourceY, destinationY, height) {
     if (height <= 0) return;
-    // Use a neutral panel fill for the left metadata column. The source row
-    // may contain an icon shadow or separator at this exact Y coordinate, so
-    // only copy the clean right-side text-panel texture at 1:1.
-    context.fillStyle = "rgb(45 48 50)";
-    context.fillRect(0, destinationY, RIGHT_PAGE_WIDTH, height);
     const stripHeight = Math.max(1, Math.min(8, source.naturalHeight - sourceY));
     for (let offset = 0; offset < height; offset += stripHeight) {
       const chunkHeight = Math.min(stripHeight, height - offset);
+      context.drawImage(source, 0, sourceY, 360, chunkHeight,
+        0, destinationY + offset, 360, chunkHeight);
       context.drawImage(source, 360, sourceY, RIGHT_PAGE_WIDTH - 360, chunkHeight,
         360, destinationY + offset, RIGHT_PAGE_WIDTH - 360, chunkHeight);
     }
@@ -633,7 +631,7 @@
         const isLast = index === sourceSlots.length - 1;
         const boundary = isLast
           ? range.end - SKILL_ROW_FOOTER_HEIGHT
-          : sourceSlots[index + 1].icon.y;
+          : sourceSlots[index + 1].icon.y - SKILL_ROW_EDGE_BUFFER;
         const chunkHeight = boundary - sourceY;
         copy(sourceY, chunkHeight, destinationY);
         destinationY += chunkHeight;
