@@ -19,6 +19,15 @@
     { y: 3309, height: 31 },
     { y: 3853, height: 147 }
   ];
+  const ABILITY_SECTION_RANGES = {
+    active: { start: 580, end: 1296 },
+    class: { start: 1296, end: 2035 },
+    append: { start: 2035, end: 2745 },
+    noble: { start: 2745, end: 3309 },
+    command: { start: 3309, end: 4000 }
+  };
+  const ABILITY_BASE_HEIGHT = 4000;
+  const SKILL_ROW_FOOTER_HEIGHT = 20;
   const PROFILE_PANEL_GAP = 24;
   const PROFILE_STATS_HEIGHT = 332;
   const PROFILE_SECTION_TEMPLATES = [
@@ -302,6 +311,9 @@
     profileCanvas: null,
     profileLayout: null,
     pageOffsets: { ability: 0, profile: 0 },
+    abilityLayout: null,
+    abilityCanvas: null,
+    abilityLayoutKey: "",
     activeSkillSearch: 0,
     activeSkillTarget: { group: "active", index: 0 },
     assets: {},
@@ -477,7 +489,148 @@
     return lines.slice(0, maxLines);
   }
 
+  function skillLineCount(text, width) {
+    const canvas = document.createElement("canvas");
+    const context = canvas.getContext("2d");
+    context.font = '32px "FgoCeText", sans-serif';
+    return Math.max(1, wrapLines(context, text, width).length);
+  }
+
+  function createAbilityLayout() {
+    const layout = {
+      groups: {},
+      sections: {},
+      shifts: { noble: 0, command: 0 },
+      gaps: [],
+      height: ABILITY_BASE_HEIGHT,
+      totalExpansion: 0
+    };
+    let cumulativeExpansion = 0;
+    ["active", "class", "append"].forEach((group) => {
+      const range = ABILITY_SECTION_RANGES[group];
+      const sourceSlots = SKILL_SLOTS[group];
+      const skills = getSkillCollection(group);
+      const slots = [];
+      let rowExpansion = 0;
+      sourceSlots.forEach((sourceSlot, index) => {
+        const nextSourceY = sourceSlots[index + 1]?.icon.y || range.end;
+        const baseRowHeight = nextSourceY - sourceSlot.icon.y;
+        const lines = skillLineCount(skills[index]?.detail, sourceSlot.text.width - 12);
+        const textOffset = sourceSlot.text.y - sourceSlot.icon.y;
+        const neededHeight = Math.max(
+          sourceSlot.icon.height,
+          textOffset + 88 + (lines - 1) * 36 + 18
+        );
+        const targetY = sourceSlot.icon.y + cumulativeExpansion + rowExpansion;
+        const targetTextY = sourceSlot.text.y + cumulativeExpansion + rowExpansion;
+        slots.push({
+          icon: { ...sourceSlot.icon, y: targetY },
+          text: {
+            ...sourceSlot.text,
+            y: targetTextY,
+            height: Math.max(sourceSlot.text.height, neededHeight - textOffset)
+          },
+          lines
+        });
+        rowExpansion += Math.max(0, neededHeight - baseRowHeight);
+      });
+      const sourceHeight = range.end - range.start;
+      layout.groups[group] = { slots, expansion: rowExpansion };
+      layout.sections[group] = {
+        sourceStart: range.start,
+        sourceEnd: range.end,
+        y: range.start + cumulativeExpansion,
+        height: sourceHeight + rowExpansion
+      };
+      cumulativeExpansion += rowExpansion;
+    });
+
+    layout.shifts.noble = cumulativeExpansion;
+    layout.sections.noble = {
+      sourceStart: ABILITY_SECTION_RANGES.noble.start,
+      sourceEnd: ABILITY_SECTION_RANGES.noble.end,
+      y: ABILITY_SECTION_RANGES.noble.start + cumulativeExpansion,
+      height: ABILITY_SECTION_RANGES.noble.end - ABILITY_SECTION_RANGES.noble.start
+    };
+    layout.shifts.command = cumulativeExpansion;
+    layout.sections.command = {
+      sourceStart: ABILITY_SECTION_RANGES.command.start,
+      sourceEnd: ABILITY_SECTION_RANGES.command.end,
+      y: ABILITY_SECTION_RANGES.command.start + cumulativeExpansion,
+      height: ABILITY_SECTION_RANGES.command.end - ABILITY_SECTION_RANGES.command.start
+    };
+    layout.totalExpansion = cumulativeExpansion;
+    layout.height = ABILITY_BASE_HEIGHT + cumulativeExpansion;
+    layout.gaps = ABILITY_SECTION_GAPS.map((gap) => {
+      let shift = 0;
+      if (gap.y >= ABILITY_SECTION_RANGES.class.start) {
+        shift += layout.groups.active.expansion;
+      }
+      if (gap.y >= ABILITY_SECTION_RANGES.append.start) {
+        shift += layout.groups.class.expansion;
+      }
+      if (gap.y >= ABILITY_SECTION_RANGES.noble.start) {
+        shift += layout.groups.append.expansion;
+      }
+      return { ...gap, y: gap.y + shift };
+    });
+    return layout;
+  }
+
+  function drawAbilitySection(context, source, range, destinationY, destinationHeight) {
+    const sourceStart = range.sourceStart ?? range.start;
+    const sourceEnd = range.sourceEnd ?? range.end;
+    const sourceHeight = sourceEnd - sourceStart;
+    if (destinationHeight === sourceHeight) {
+      context.drawImage(source, 0, sourceStart, RIGHT_PAGE_WIDTH, sourceHeight,
+        0, destinationY, RIGHT_PAGE_WIDTH, sourceHeight);
+      return;
+    }
+    const headerHeight = 40;
+    const footerHeight = 22;
+    const bodySourceHeight = Math.max(1, sourceHeight - headerHeight - footerHeight);
+    const bodyDestinationHeight = Math.max(1, destinationHeight - headerHeight - footerHeight);
+    context.drawImage(source, 0, sourceStart, RIGHT_PAGE_WIDTH, headerHeight,
+      0, destinationY, RIGHT_PAGE_WIDTH, headerHeight);
+    context.drawImage(source, 0, sourceStart + headerHeight, RIGHT_PAGE_WIDTH, bodySourceHeight,
+      0, destinationY + headerHeight, RIGHT_PAGE_WIDTH, bodyDestinationHeight);
+    context.drawImage(source, 0, sourceEnd - footerHeight, RIGHT_PAGE_WIDTH, footerHeight,
+      0, destinationY + destinationHeight - footerHeight, RIGHT_PAGE_WIDTH, footerHeight);
+  }
+
+  function buildAbilityPageCanvas() {
+    const source = state.assets.abilityPage;
+    if (!source?.naturalWidth || !source.naturalHeight) return source;
+    const detailsKey = ["active", "class", "append"]
+      .flatMap((group) => getSkillCollection(group).map((skill) => skill.detail || ""))
+      .join("\\u0000");
+    if (state.abilityLayoutKey === detailsKey && state.abilityLayout) {
+      return state.abilityCanvas || source;
+    }
+    const layout = createAbilityLayout();
+    state.abilityLayoutKey = detailsKey;
+    state.abilityLayout = layout;
+    if (!layout.totalExpansion) {
+      state.abilityCanvas = null;
+      return source;
+    }
+    const canvas = document.createElement("canvas");
+    canvas.width = RIGHT_PAGE_WIDTH;
+    canvas.height = layout.height;
+    const context = canvas.getContext("2d");
+    context.drawImage(source, 0, 0, RIGHT_PAGE_WIDTH, ABILITY_SECTION_RANGES.active.start,
+      0, 0, RIGHT_PAGE_WIDTH, ABILITY_SECTION_RANGES.active.start);
+    ["active", "class", "append", "noble", "command"].forEach((sectionName) => {
+      const section = layout.sections[sectionName];
+      drawAbilitySection(context, source, section,
+        section.y, section.height);
+    });
+    state.abilityCanvas = canvas;
+    return canvas;
+  }
+
   function pageSource(page) {
+    if (page === "ability") return buildAbilityPageCanvas();
     if (page === "profile") {
       if (!state.profileCanvas) buildProfileCanvas();
       return state.profileCanvas || state.assets.profilePage;
@@ -1016,29 +1169,30 @@
     drawPsdCardLayer(context, state.assets[`command${asset}Text`], layers.text, layers.base, target);
   }
 
-  function restoreSkillSlot(context, slot) {
+  function restoreSkillSlot(context, slot, sourceSlot = slot) {
     // ability-page-shell has the PSD's textured background and icon frame but
     // no editable skill text. Restore both pieces before drawing replacements.
-    restorePageRegion(context, state.assets.abilityPage, {
-      x: slot.icon.x - 7,
-      y: slot.icon.y - 7,
-      width: slot.icon.width + 14,
-      height: slot.icon.height + 14
-    });
-    restorePageRegion(context, state.assets.abilityPage, {
-      x: slot.text.x,
-      y: slot.text.y,
-      width: slot.text.width,
-      height: slot.text.height
-    });
+    const source = state.assets.abilityPage;
+    context.drawImage(source,
+      sourceSlot.icon.x - 7, sourceSlot.icon.y - 7,
+      sourceSlot.icon.width + 14, sourceSlot.icon.height + 14,
+      slot.icon.x - 7, slot.icon.y - 7,
+      slot.icon.width + 14, slot.icon.height + 14);
+    context.drawImage(source,
+      sourceSlot.text.x, sourceSlot.text.y,
+      sourceSlot.text.width, sourceSlot.text.height,
+      slot.text.x, slot.text.y,
+      slot.text.width, sourceSlot.text.height);
   }
 
   function drawSkillRows(context, group, skills) {
-    const slots = SKILL_SLOTS[group];
+    const sourceSlots = SKILL_SLOTS[group];
+    const slots = state.abilityLayout?.groups[group]?.slots || sourceSlots;
     skills.forEach((skill, index) => {
       const slot = slots[index];
-      if (!slot) return;
-      restoreSkillSlot(context, slot);
+      const sourceSlot = sourceSlots[index];
+      if (!slot || !sourceSlot) return;
+      restoreSkillSlot(context, slot, sourceSlot);
       context.save();
       roundedPath(context, slot.icon.x, slot.icon.y, slot.icon.width, slot.icon.height, 6);
       context.clip();
@@ -1051,7 +1205,7 @@
       drawPageText(context, skill.name || `技能 ${index + 1}`, slot.text.x + 2, slot.text.y + 42,
         slot.text.width - 12, 42, 24);
       drawPageParagraph(context, skill.detail, slot.text.x + 2, slot.text.y + 88,
-        slot.text.width - 12, 3, 32, 36);
+        slot.text.width - 12, Infinity, 32, 36);
     });
   }
 
@@ -1092,20 +1246,16 @@
 
     drawSkillRows(context, "active", state.skills);
 
-    // Passive skills, append skills and Noble Phantasm are not editable in
-    // this editor. Copy their original PSD pixels as-is instead of attempting
-    // to redraw or approximate their typography and ornaments.
-    context.drawImage(state.assets.abilityReference,
-      0, 1322, 1074, 2019,
-      0, 1322, 1074, 2019);
-
     // 职介技能 and 追加技能 are independent editable groups. Their shell
     // backgrounds are restored per row before user content is drawn.
     drawSkillRows(context, "class", state.classSkills);
     drawSkillRows(context, "append", state.appendSkills);
+    context.save();
+    context.translate(0, state.abilityLayout?.shifts.noble || 0);
     drawNobleCard(context);
     drawNobleHeader(context);
     drawNobleDetails(context);
+    context.restore();
 
     const commandSlots = [
       { x: 49, y: 3422, width: 144, height: 186 },
@@ -1114,8 +1264,9 @@
       { x: 669, y: 3419, width: 149, height: 195 },
       { x: 876, y: 3419, width: 149, height: 195 }
     ];
+    const commandShift = state.abilityLayout?.shifts.command || 0;
     commandSlots.forEach((slot, index) => {
-      drawCommandCard(context, state.commandTypes[index], slot);
+      drawCommandCard(context, state.commandTypes[index], { ...slot, y: slot.y + commandShift });
     });
   }
 
@@ -1135,7 +1286,8 @@
     context.beginPath();
     context.rect(pageX, PAGE_TOP, RIGHT_PAGE_WIDTH, HEIGHT - PAGE_TOP);
     context.clip();
-    ABILITY_SECTION_GAPS.forEach((gap) => {
+    const gaps = state.abilityLayout?.gaps || ABILITY_SECTION_GAPS;
+    gaps.forEach((gap) => {
       const y = PAGE_TOP + (gap.y - offset) * scale;
       context.save();
       context.beginPath();
@@ -1328,6 +1480,9 @@
 
   function updateFromControls() {
     resizeSkillDetails();
+    state.abilityLayoutKey = "";
+    state.abilityLayout = null;
+    state.abilityCanvas = null;
     state.name = dom.name.value;
     state.title = dom.title.value;
     state.className = dom.className.value;
@@ -1354,7 +1509,6 @@
     dom.profileStats.forEach((control) => {
       state.profileStats[control.dataset.servantProfileStat] = control.value;
     });
-    if (state.page === "profile") updatePageOffsetControl();
     ["active", "class", "append"].forEach((group) => {
       getSkillCollection(group).forEach((skill, index) => {
         const nameControl = skillControl(dom.skillNames, group, index);
@@ -1363,6 +1517,7 @@
         if (detailControl) skill.detail = detailControl.value;
       });
     });
+    updatePageOffsetControl();
     state.commandTypes = dom.commandTypes.map((select) => select.value);
     updateRange(dom.artScale, dom.artScaleValue);
     updateRange(dom.artX, dom.artXValue);
