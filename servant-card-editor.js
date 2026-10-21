@@ -523,6 +523,7 @@
         );
         const targetY = sourceSlot.icon.y + cumulativeExpansion + rowExpansion;
         const targetTextY = sourceSlot.text.y + cumulativeExpansion + rowExpansion;
+        const expansion = Math.max(0, neededHeight - baseRowHeight);
         slots.push({
           icon: { ...sourceSlot.icon, y: targetY },
           text: {
@@ -530,9 +531,10 @@
             y: targetTextY,
             height: Math.max(sourceSlot.text.height, neededHeight - textOffset)
           },
-          lines
+          lines,
+          expansion
         });
-        rowExpansion += Math.max(0, neededHeight - baseRowHeight);
+        rowExpansion += expansion;
       });
       const sourceHeight = range.end - range.start;
       layout.groups[group] = { slots, expansion: rowExpansion };
@@ -598,6 +600,67 @@
       0, destinationY + destinationHeight - footerHeight, RIGHT_PAGE_WIDTH, footerHeight);
   }
 
+  function drawAbilityTextureFill(context, source, sourceY, destinationY, height) {
+    if (height <= 0) return;
+    // Use a neutral panel fill for the left metadata column. The source row
+    // may contain an icon shadow or separator at this exact Y coordinate, so
+    // only copy the clean right-side text-panel texture at 1:1.
+    context.fillStyle = "rgb(45 48 50)";
+    context.fillRect(0, destinationY, RIGHT_PAGE_WIDTH, height);
+    const stripHeight = Math.max(1, Math.min(8, source.naturalHeight - sourceY));
+    for (let offset = 0; offset < height; offset += stripHeight) {
+      const chunkHeight = Math.min(stripHeight, height - offset);
+      context.drawImage(source, 360, sourceY, RIGHT_PAGE_WIDTH - 360, chunkHeight,
+        360, destinationY + offset, RIGHT_PAGE_WIDTH - 360, chunkHeight);
+    }
+  }
+
+  function drawAbilityPagePreservingScale(context, source, layout) {
+    const copy = (sourceY, height, destinationY) => {
+      if (height <= 0) return;
+      context.drawImage(source, 0, sourceY, RIGHT_PAGE_WIDTH, height,
+        0, destinationY, RIGHT_PAGE_WIDTH, height);
+    };
+    copy(0, ABILITY_SECTION_RANGES.active.start, 0);
+    let cumulativeExpansion = 0;
+    ["active", "class", "append"].forEach((group) => {
+      const range = ABILITY_SECTION_RANGES[group];
+      const sourceSlots = SKILL_SLOTS[group];
+      const slots = layout.groups[group].slots;
+      let sourceY = range.start;
+      let destinationY = range.start + cumulativeExpansion;
+      sourceSlots.forEach((sourceSlot, index) => {
+        const isLast = index === sourceSlots.length - 1;
+        const boundary = isLast
+          ? range.end - SKILL_ROW_FOOTER_HEIGHT
+          : sourceSlots[index + 1].icon.y;
+        const chunkHeight = boundary - sourceY;
+        copy(sourceY, chunkHeight, destinationY);
+        destinationY += chunkHeight;
+        const expansion = slots[index].expansion || 0;
+        if (expansion) {
+          const fillY = Math.min(
+            boundary - 1,
+            sourceSlot.icon.y + sourceSlot.icon.height + 25
+          );
+          drawAbilityTextureFill(context, source, fillY, destinationY, expansion);
+          destinationY += expansion;
+        }
+        sourceY = boundary;
+      });
+      copy(sourceY, range.end - sourceY, destinationY);
+      cumulativeExpansion += layout.groups[group].expansion;
+    });
+
+    // Noble Phantasm and command-card sections are copied without scaling and
+    // moved as a whole after the expanded skill groups.
+    ["noble", "command"].forEach((sectionName) => {
+      const range = ABILITY_SECTION_RANGES[sectionName];
+      copy(range.start, range.end - range.start,
+        range.start + cumulativeExpansion);
+    });
+  }
+
   function buildAbilityPageCanvas() {
     const source = state.assets.abilityPage;
     if (!source?.naturalWidth || !source.naturalHeight) return source;
@@ -618,13 +681,7 @@
     canvas.width = RIGHT_PAGE_WIDTH;
     canvas.height = layout.height;
     const context = canvas.getContext("2d");
-    context.drawImage(source, 0, 0, RIGHT_PAGE_WIDTH, ABILITY_SECTION_RANGES.active.start,
-      0, 0, RIGHT_PAGE_WIDTH, ABILITY_SECTION_RANGES.active.start);
-    ["active", "class", "append", "noble", "command"].forEach((sectionName) => {
-      const section = layout.sections[sectionName];
-      drawAbilitySection(context, source, section,
-        section.y, section.height);
-    });
+    drawAbilityPagePreservingScale(context, source, layout);
     state.abilityCanvas = canvas;
     return canvas;
   }
